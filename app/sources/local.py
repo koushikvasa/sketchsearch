@@ -4,7 +4,7 @@ import json
 
 import numpy as np
 
-from app.config import CLIP_EMBEDDINGS, CLIP_IDS, INDEX_FILES, INDEX_SOURCE
+from app.config import CLIP_EMBEDDINGS, CLIP_IDS, INDEX_FILES, INDEX_SOURCE, LABEL_ALIASES
 from app.models import Segment
 
 
@@ -17,6 +17,7 @@ class LocalSource:
             raise FileNotFoundError(f"{path} missing; run: uv run python -m scripts.build_index")
         data = json.loads(path.read_text())
         self.index_source = index_source
+        self.label_aliases: dict[str, list[str]] = LABEL_ALIASES.get(index_source, {})
         self.meta: dict = data["meta"]
         self.cameras: list[dict] = data["cameras"]
         self.segments: dict[str, Segment] = {

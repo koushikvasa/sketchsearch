@@ -12,9 +12,21 @@ dependencies = [
     "open-clip-torch>=3.3.0",
     "pydantic>=2.13.5",
     "python-dotenv>=1.2.4",
+    "scipy>=1.18.1",
     "torch>=2.14.1",
     "torchvision>=0.29.1",
     "truststore>=0.10.4",
     "ultralytics>=8.4.174",
     "uvicorn[standard]>=0.54.0",
+    "weave>=0.53.11",
 ]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.1.1",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

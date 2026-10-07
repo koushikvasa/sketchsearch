@@ -27,7 +27,17 @@ INDEX_FILES = {"gt": DATA_DIR / "index.json", "yolo": DATA_DIR / "index_yolo.jso
 
 SOURCE = os.getenv("SOURCE", "local")
 INDEX_SOURCE = os.getenv("INDEX_SOURCE", "gt")
+TEXT_PREFILTER = os.getenv("TEXT_PREFILTER", "false").strip().lower() in ("1", "true", "yes", "on")
 ROOT_PATH = os.getenv("ROOT_PATH", "")
+WEAVE_PROJECT = os.getenv("WEAVE_PROJECT", "sketchsearch")
+
+# Sketch label -> track labels of the YOLO (COCO) index, from data/alias_report.json. YOLO11 never
+# detected the forklift / robot / transporter (the trucks/boats it reported were shelving), so those
+# map to nothing. The GT index already uses sketch labels, so it needs no aliases.
+LABEL_ALIASES: dict[str, dict[str, list[str]]] = {
+    "gt": {},
+    "yolo": {"person": ["person"], "forklift": [], "robot": [], "transporter": []},
+}
 
 _WINGET_FFMPEG = Path.home() / "AppData/Local/Microsoft/WinGet/Links/ffmpeg.exe"
 FFMPEG = shutil.which("ffmpeg") or (str(_WINGET_FFMPEG) if _WINGET_FFMPEG.exists() else "ffmpeg")
