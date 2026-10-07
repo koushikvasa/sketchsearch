@@ -4,7 +4,7 @@ import json
 
 import numpy as np
 
-from app.config import CLIP_EMBEDDINGS, CLIP_IDS, INDEX_FILES, INDEX_SOURCE, LABEL_ALIASES
+from app.config import CLIP_EMBEDDINGS, CLIP_IDS, INDEX_FILES, INDEX_SOURCE, LABEL_ALIASES, SEGMENTS_DIR
 from app.models import Segment
 
 
@@ -59,7 +59,17 @@ class LocalSource:
         return ranked[:k]
 
     def ask(self, segment_id: str, question: str) -> str:
-        raise NotImplementedError("Phase 4: Gemini verification")
+        """Ask the video model about one segment clip (inline bytes). Returns its JSON answer text,
+        with the model that answered added as "_model"."""
+        from app.vision.gemini import ask_video
+
+        self.get_segment(segment_id)  # KeyError for unknown ids
+        text, model = ask_video(SEGMENTS_DIR / f"{segment_id}.mp4", question)
+        try:
+            data = json.loads(text[text.find("{"):text.rfind("}") + 1])
+            return json.dumps({**data, "_model": model})
+        except ValueError:
+            return text
 
     def clip_url(self, segment_id: str) -> str:
         return f"clips/{segment_id}.mp4"

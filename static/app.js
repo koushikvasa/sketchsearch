@@ -11,6 +11,12 @@ const ABSENT_SIZE = [0.25, 0.25];
 const COMPONENTS = ["relations", "position", "motion", "size", "keyframe"];
 const COMPONENT_NAMES = { relations: "relations", position: "position", motion: "motion", size: "size", keyframe: "end layout" };
 const TOP_N = 12;
+const VERIFY_N = 10;
+const FULL = { x: 0, y: 0, w: 1, h: 1 };
+const ZOOM_PAD = 0.3; // padding around the action, as a fraction of its size
+const ZOOM_MIN = 0.22; // never zoom in more than ~4.5x
+const ZOOM_SKIP = 0.8; // action already fills the frame: don't zoom
+const DRAW_STAGGER_MS = 150;
 const KF_HELP = {
   start: "Draw where things are at the start.",
   end: "Drag each box to where it ends up.",
@@ -97,6 +103,7 @@ const state = {
   cameras: [],
   cameraId: null,
   bgUrl: null,
+  text: null, // sentence a Words -> Sketch came from
   history: [],
 };
 
@@ -505,8 +512,9 @@ function selectCamera(cameraId, bgUrl = null) {
   setBackground();
 }
 
-function loadSketch(sketch, { cameraId = null, bgUrl = null } = {}) {
+function loadSketch(sketch, { cameraId = null, bgUrl = null, text = null } = {}) {
   snapshot();
+  state.text = text;
   state.objects = sketch.objects.map((o) => ({
     id: o.id, label: o.label, absent: !!o.absent,
     start: o.start_box, end: o.absent ? null : o.end_box || null, path: o.absent ? null : o.path || null,
@@ -524,6 +532,7 @@ function toSketch() {
       end_box: o.absent ? null : o.end, path: o.absent ? null : o.path,
     })),
     camera_ids: $("#onlyCamera").checked && state.cameraId ? [state.cameraId] : null,
+    text: state.text,
   };
 }
 
@@ -531,11 +540,14 @@ function toSketch() {
 // Search + results
 // ---------------------------------------------------------------------------
 let searchSeq = 0;
+let lastSketch = null;
+let verifyAbort = null;
 let cards = [];
 let animating = false;
 
 function showState(kind, message = "") {
   stopAllVideos();
+  resetVerify();
   cards = [];
   const box = $("#results");
   if (kind === "loading") {
@@ -574,6 +586,8 @@ async function runSearch() {
 }
 
 function renderResults(res, sketch) {
+  resetVerify();
+  lastSketch = sketch;
   if (!res.results.length) return showState("empty");
   stopAllVideos();
   const box = $("#results");
@@ -586,9 +600,10 @@ function renderResults(res, sketch) {
   }));
   cards = res.results.map((r, i) => buildCard(r, i + 1, objects));
   cards.forEach((c) => box.appendChild(c.el));
+  $("#verifyBtn").disabled = false;
   for (const card of cards) {
     api(`api/segments/${encodeURIComponent(card.result.segment_id)}`)
-      .then((seg) => { card.segment = seg; drawOverlay(card, card.posterTime); })
+      .then((seg) => { card.segment = seg; updateZoom(card); })
       .catch(() => { /* overlay just shows the sketch */ });
     drawOverlay(card, card.posterTime);
   }
@@ -602,6 +617,7 @@ function buildCard(r, rank, objects) {
   $(".rank", el).textContent = `#${rank}`;
   $(".seg", el).innerHTML = `${escapeHtml(cameraName(r.camera_id))} <small>${r.start}–${r.end} s · best ${r.window[0]}–${r.window[1]} s</small>`;
   $(".score", el).textContent = r.score.toFixed(2);
+  $(".explain", el).textContent = r.explanation || "";
 
   const abs = $(".absence", el);
   if (r.absence_ok !== null && r.absence_ok !== undefined) {
@@ -624,7 +640,20 @@ function buildCard(r, rank, objects) {
   const card = {
     el, video, overlay: $(".overlay", el), result: r, objects, segment: null,
     pinned: false, playing: false, started: false, duration, posterTime: duration / 2,
+    zoom: FULL, zoomOn: true, verdict: null,
   };
+  updateZoom(card);
+  const zoomBtn = $(".zoom-btn", el);
+  zoomBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    card.zoomOn = !card.zoomOn;
+    applyZoom(card);
+  });
+  const vbadge = $(".badge.verify", el);
+  vbadge.addEventListener("click", () => {
+    const reason = $(".verify-reason", el);
+    if (card.verdict) reason.hidden = !reason.hidden;
+  });
   const win = $(".timeline .win", el);
   win.style.left = `${(r.window[0] / duration) * 100}%`;
   win.style.width = `${((r.window[1] - r.window[0]) / duration) * 100}%`;
@@ -714,7 +743,9 @@ function drawOverlay(card, t) {
   const r = card.result;
   const [t0, t1] = r.window;
   const u = clamp((t - t0) / (t1 - t0 || 1), 0, 1);
-  const X = (x) => x * w, Y = (y) => y * h;
+  const z = card.zoomOn ? card.zoom : FULL;
+  const X = (x) => ((x - z.x) / z.w) * w, Y = (y) => ((y - z.y) / z.h) * h;
+  const SX = (v) => (v / z.w) * w, SY = (v) => (v / z.h) * h;
   const tracks = Object.fromEntries((card.segment?.tracks || []).map((tr) => [tr.track_id, tr]));
 
   // Absent zones
@@ -725,8 +756,8 @@ function drawOverlay(card, t) {
     ctx.lineWidth = 2;
     ctx.strokeStyle = ABSENT_COLOR;
     ctx.fillStyle = r.absence_ok === false ? "rgba(255,107,107,0.22)" : "rgba(255,107,107,0.08)";
-    ctx.fillRect(X(b.x), Y(b.y), X(b.w), Y(b.h));
-    ctx.strokeRect(X(b.x), Y(b.y), X(b.w), Y(b.h));
+    ctx.fillRect(X(b.x), Y(b.y), SX(b.w), SY(b.h));
+    ctx.strokeRect(X(b.x), Y(b.y), SX(b.w), SY(b.h));
     label(ctx, `no ${o.label}`, X(b.x) + 3, Y(b.y + b.h) - 4, ABSENT_COLOR);
     ctx.restore();
   }
@@ -760,8 +791,8 @@ function drawOverlay(card, t) {
     ctx.lineWidth = 2;
     ctx.strokeStyle = hexA(color, 0.95);
     ctx.fillStyle = hexA(color, 0.1);
-    ctx.fillRect(X(gx - gw / 2), Y(gy - gh / 2), X(gw), Y(gh));
-    ctx.strokeRect(X(gx - gw / 2), Y(gy - gh / 2), X(gw), Y(gh));
+    ctx.fillRect(X(gx - gw / 2), Y(gy - gh / 2), SX(gw), SY(gh));
+    ctx.strokeRect(X(gx - gw / 2), Y(gy - gh / 2), SX(gw), SY(gh));
     ctx.restore();
     ctx.save();
     ctx.shadowColor = color;
@@ -786,7 +817,7 @@ function drawOverlay(card, t) {
       ctx.stroke();
       ctx.lineWidth = 2.5;
       ctx.strokeStyle = color;
-      ctx.strokeRect(X(real.x), Y(real.y), X(real.w), Y(real.h));
+      ctx.strokeRect(X(real.x), Y(real.y), SX(real.w), SY(real.h));
       label(ctx, o.label, X(real.x), Y(real.y) - 4, color);
       ctx.restore();
     }
@@ -832,6 +863,238 @@ async function moreLikeThis(r) {
 }
 
 // ---------------------------------------------------------------------------
+// Zoom to action
+// ---------------------------------------------------------------------------
+/** Crop (normalized, same w and h so the 16:9 aspect holds) around the matched tracks + absent zones. */
+function computeZoom(card) {
+  const r = card.result;
+  const [t0, t1] = r.window;
+  const boxes = [];
+  const tracks = Object.fromEntries((card.segment?.tracks || []).map((tr) => [tr.track_id, tr]));
+  for (const o of card.objects) {
+    if (o.absent) { boxes.push(o.start); continue; }
+    const tr = tracks[r.assignment[o.id]];
+    const pts = tr ? tr.points.filter((p) => p.t >= t0 - 1e-6 && p.t <= t1 + 1e-6) : [];
+    if (pts.length) pts.forEach((p) => boxes.push(p.box));
+    else { boxes.push(o.start); if (o.end) boxes.push(o.end); } // segment not loaded yet: use the sketch
+  }
+  if (!boxes.length) return FULL;
+  let x0 = Math.min(...boxes.map((b) => b.x)), y0 = Math.min(...boxes.map((b) => b.y));
+  let x1 = Math.max(...boxes.map((b) => b.x + b.w)), y1 = Math.max(...boxes.map((b) => b.y + b.h));
+  const pw = (x1 - x0) * ZOOM_PAD, ph = (y1 - y0) * ZOOM_PAD;
+  x0 -= pw; x1 += pw; y0 -= ph; y1 += ph;
+  const side = clamp(Math.max(x1 - x0, y1 - y0), ZOOM_MIN, 1);
+  if (side >= ZOOM_SKIP) return FULL;
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  return { x: clamp(cx - side / 2, 0, 1 - side), y: clamp(cy - side / 2, 0, 1 - side), w: side, h: side };
+}
+
+function updateZoom(card) {
+  card.zoom = computeZoom(card);
+  applyZoom(card);
+}
+
+function applyZoom(card) {
+  const z = card.zoomOn ? card.zoom : FULL;
+  card.video.style.transform = z === FULL ? "" : `scale(${1 / z.w}) translate(${-z.x * 100}%, ${-z.y * 100}%)`;
+  const btn = $(".zoom-btn", card.el);
+  btn.hidden = card.zoom === FULL;
+  btn.classList.toggle("on", card.zoomOn);
+  btn.textContent = card.zoomOn ? `🔍 ${(1 / card.zoom.w).toFixed(1)}×` : "🔍 off";
+  drawOverlay(card, card.started ? card.video.currentTime : card.posterTime);
+}
+
+// ---------------------------------------------------------------------------
+// AI verification (server-sent events)
+// ---------------------------------------------------------------------------
+const VERDICT_UI = {
+  YES: { cls: "yes", text: "✅ AI: yes" },
+  NO: { cls: "no", text: "❌ AI: no" },
+  UNSURE: { cls: "unsure", text: "⚠️ AI: unsure" },
+};
+
+function resetVerify() {
+  if (verifyAbort) verifyAbort.abort();
+  verifyAbort = null;
+  const btn = $("#verifyBtn");
+  btn.disabled = true;
+  btn.classList.remove("busy");
+  btn.textContent = `🤖 AI check top ${VERIFY_N}`;
+  $("#verifySummary").hidden = true;
+}
+
+function setVerdict(card, v) {
+  card.verdict = v;
+  const ui = VERDICT_UI[v.verdict] || VERDICT_UI.UNSURE;
+  const badge = $(".badge.verify", card.el);
+  badge.hidden = false;
+  badge.className = `badge verify ${ui.cls} landed`;
+  badge.textContent = ui.text;
+  badge.title = `${v.reason}\n(${v.model || "video model"}${v.cached ? ", cached" : ""}; click to show or hide)`;
+  const reason = $(".verify-reason", card.el);
+  reason.textContent = v.reason;
+  reason.hidden = v.verdict === "YES"; // the honest "no" / "unsure" reasons show right away
+  card.el.classList.toggle("rejected", v.verdict === "NO");
+}
+
+function updateVerifySummary(counts, done, total) {
+  const el = $("#verifySummary");
+  el.hidden = false;
+  const extra = [counts.NO && `${counts.NO} ❌`, counts.UNSURE && `${counts.UNSURE} ⚠️`].filter(Boolean).join(", ");
+  el.textContent = done < total
+    ? `Verified ${counts.YES} of ${total} · checking ${done}/${total}…`
+    : `Verified ${counts.YES} of ${total}${extra ? ` (${extra})` : ""}`;
+}
+
+async function runVerify() {
+  if (!lastSketch || !cards.length) return;
+  const targets = cards.slice(0, VERIFY_N);
+  const btn = $("#verifyBtn");
+  if (verifyAbort) verifyAbort.abort();
+  const controller = new AbortController();
+  verifyAbort = controller;
+  btn.disabled = true;
+  btn.classList.add("busy");
+  btn.textContent = "🤖 Checking…";
+  for (const c of targets) {
+    c.verdict = null;
+    c.el.classList.remove("rejected");
+    const b = $(".badge.verify", c.el);
+    b.hidden = false;
+    b.className = "badge verify checking";
+    b.textContent = "⏳ AI checking…";
+    b.title = "";
+    $(".verify-reason", c.el).hidden = true;
+  }
+  const counts = { YES: 0, NO: 0, UNSURE: 0 };
+  let done = 0;
+  updateVerifySummary(counts, 0, targets.length);
+  try {
+    const res = await fetch("api/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sketch: lastSketch,
+        items: targets.map((c) => ({ segment_id: c.result.segment_id, window: c.result.window })),
+      }),
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    for (;;) {
+      const { value, done: finished } = await reader.read();
+      if (finished) break;
+      buf += decoder.decode(value, { stream: true });
+      let cut;
+      while ((cut = buf.indexOf("\n\n")) >= 0) {
+        const chunk = buf.slice(0, cut);
+        buf = buf.slice(cut + 2);
+        const event = /^event: (.*)$/m.exec(chunk)?.[1];
+        const data = /^data: (.*)$/m.exec(chunk)?.[1];
+        if (event !== "verdict" || !data) continue;
+        const payload = JSON.parse(data);
+        const card = targets.find((c) => c.result.segment_id === payload.segment_id);
+        if (card) setVerdict(card, payload);
+        counts[payload.verdict] = (counts[payload.verdict] || 0) + 1;
+        done += 1;
+        updateVerifySummary(counts, done, targets.length);
+      }
+    }
+    updateVerifySummary(counts, targets.length, targets.length);
+  } catch (err) {
+    if (err.name === "AbortError") return;
+    toast(`AI check failed: ${err.message}`, true);
+    for (const c of targets) if (!c.verdict) $(".badge.verify", c.el).hidden = true;
+  } finally {
+    if (verifyAbort === controller) {
+      verifyAbort = null;
+      btn.disabled = false;
+      btn.classList.remove("busy");
+      btn.textContent = `🤖 AI check top ${VERIFY_N}`;
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// ✨ Words -> Sketch and 📄 Diagram -> Sketch
+// ---------------------------------------------------------------------------
+function toStateObject(o) {
+  return {
+    id: o.id, label: o.label, absent: !!o.absent,
+    start: o.start_box, end: o.absent ? null : o.end_box || null, path: o.absent ? null : o.path || null,
+  };
+}
+
+async function animateSketch(objects) {
+  snapshot();
+  state.objects = [];
+  state.selectedId = null;
+  state.tab = "start";
+  render();
+  for (const o of objects) {
+    await new Promise((resolve) => setTimeout(resolve, DRAW_STAGGER_MS));
+    state.objects.push(toStateObject(o));
+    render();
+  }
+}
+
+async function sketchFromText(e) {
+  e.preventDefault();
+  const text = $("#sketchText").value.trim();
+  if (text.length < 2) return toast("Describe the moment first, e.g. “two people walking toward each other”.");
+  const btn = $("#sketchIt");
+  btn.disabled = true;
+  btn.classList.add("busy");
+  btn.textContent = "✨ Sketching…";
+  try {
+    const res = await api("api/text-to-sketch", { method: "POST", body: JSON.stringify({ text }) });
+    await animateSketch(res.sketch.objects);
+    state.text = text;
+    toast(`✨ Sketched by ${res.model} (${res.provider}) in ${(res.elapsed_ms / 1000).toFixed(1)} s. Searching…`);
+    await runSearch();
+  } catch (err) {
+    toast(`Couldn't sketch that: ${err.message}`, true);
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove("busy");
+    btn.textContent = "✨ Sketch it";
+  }
+}
+
+async function uploadDiagram() {
+  const input = $("#diagramFile");
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file) return;
+  const btn = $("#diagramBtn");
+  btn.disabled = true;
+  btn.classList.add("busy");
+  btn.textContent = "📄 Reading diagram…";
+  try {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch("api/diagram-to-sketch", { method: "POST", body: form });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.detail || `${res.status} ${res.statusText}`);
+    loadSketch(body.sketch);
+    state.bgUrl = URL.createObjectURL(file); // show the diagram faintly behind the boxes
+    $("#showFrame").checked = true;
+    setBackground();
+    toast(`📄 ${body.sketch.objects.length} objects read from the diagram by ${body.model}. ` +
+          "Your diagram is the faint background: adjust the boxes, then Search.");
+  } catch (err) {
+    toast(`Couldn't read the diagram: ${err.message}`, true);
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove("busy");
+    btn.textContent = "📄 Upload diagram";
+  }
+}
+
+
+// ---------------------------------------------------------------------------
 // Boot
 // ---------------------------------------------------------------------------
 function bindControls() {
@@ -841,6 +1104,10 @@ function bindControls() {
   $("#delete").addEventListener("click", deleteSelected);
   $("#clear").addEventListener("click", clearAll);
   $("#search").addEventListener("click", runSearch);
+  $("#verifyBtn").addEventListener("click", runVerify);
+  $("#textForm").addEventListener("submit", sketchFromText);
+  $("#diagramBtn").addEventListener("click", () => $("#diagramFile").click());
+  $("#diagramFile").addEventListener("change", uploadDiagram);
   $("#showFrame").addEventListener("change", setBackground);
   $("#camera").addEventListener("change", (e) => selectCamera(e.target.value));
   document.addEventListener("keydown", (e) => {

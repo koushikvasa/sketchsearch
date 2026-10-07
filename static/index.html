@@ -63,9 +63,15 @@
       <div class="hint" id="hint" hidden>💡 Tip: add a second object or a path. Relationships make search precise.</div>
       <div class="toast" id="toast" hidden></div>
 
-      <div class="row text-row">
-        <input id="sketchText" type="text" disabled placeholder="✨ Describe the moment, e.g. “worker on the left, forklift coming at them” (Phase 4)">
-        <button disabled title="Words → Sketch arrives in Phase 4">✨ Sketch it</button>
+      <form class="row text-row" id="textForm">
+        <input id="sketchText" type="text" autocomplete="off"
+               placeholder="✨ Describe the moment, e.g. “worker on the left, forklift coming at them”">
+        <button type="submit" id="sketchIt" title="Turn the sentence into a sketch, then search">✨ Sketch it</button>
+      </form>
+      <div class="row">
+        <button id="diagramBtn" title="Upload a photo or scan of a hand-drawn diagram">📄 Upload diagram</button>
+        <input id="diagramFile" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+        <span class="muted small">Stick figures, boxes labelled “forklift”, arrows, an X for “nobody here”.</span>
       </div>
 
       <button id="search" class="primary big">Search</button>
@@ -76,7 +82,8 @@
       <div class="results-head">
         <h2>Results</h2>
         <span class="status" id="status">Draw a sketch and press Search.</span>
-        <span class="verify-summary" title="AI verification arrives in Phase 4">AI verified: — of —</span>
+        <button id="verifyBtn" disabled title="A video model watches the top 10 clips and checks each against your sketch">🤖 AI check top 10</button>
+        <span class="verify-summary" id="verifySummary" hidden></span>
       </div>
       <div class="legend">
         <span><i class="sw solid"></i> real track</span>
@@ -94,6 +101,7 @@
         <canvas class="overlay"></canvas>
         <div class="timeline"><div class="win"></div><div class="head"></div></div>
         <span class="rank"></span>
+        <button class="zoom-btn" title="Zoom to the action (click to toggle)">🔍</button>
         <span class="play-hint">hover or click to play</span>
       </div>
       <div class="card-body">
@@ -101,10 +109,12 @@
           <span class="seg"></span>
           <span class="score"></span>
         </div>
+        <p class="explain"></p>
         <div class="badges">
           <span class="badge absence" hidden></span>
-          <span class="badge verify pending" title="AI verification arrives in Phase 4">AI check · soon</span>
+          <button class="badge verify" hidden></button>
         </div>
+        <p class="verify-reason" hidden></p>
         <div class="bars"></div>
         <div class="card-actions">
           <button class="more">More like this</button>
