@@ -1,0 +1,82 @@
+{
+  "yolo": {
+    "model": "yolo11n.pt",
+    "imgsz": 960,
+    "conf": 0.1,
+    "tracker": "bytetrack"
+  },
+  "iou_threshold": 0.5,
+  "sample_fps": 5,
+  "min_gt_area": 0.0004,
+  "large_area": 0.005,
+  "per_class": {
+    "forklift": {
+      "gt_boxes": 241,
+      "matched@0.5": 0,
+      "recall@0.5": 0.0,
+      "recall@0.3": 0.0,
+      "gt_boxes_large": 57,
+      "recall_large@0.5": 0.0,
+      "yolo_labels@0.5": {}
+    },
+    "person": {
+      "gt_boxes": 22142,
+      "matched@0.5": 16202,
+      "recall@0.5": 0.732,
+      "recall@0.3": 0.755,
+      "gt_boxes_large": 5860,
+      "recall_large@0.5": 0.86,
+      "yolo_labels@0.5": {
+        "person": 16160,
+        "bottle": 12,
+        "dog": 8,
+        "fire hydrant": 7,
+        "bird": 7,
+        "parking meter": 5,
+        "bicycle": 2,
+        "suitcase": 1
+      }
+    },
+    "robot": {
+      "gt_boxes": 319,
+      "matched@0.5": 0,
+      "recall@0.5": 0.0,
+      "recall@0.3": 0.0,
+      "gt_boxes_large": 0,
+      "recall_large@0.5": null,
+      "yolo_labels@0.5": {}
+    },
+    "transporter": {
+      "gt_boxes": 164,
+      "matched@0.5": 2,
+      "recall@0.5": 0.012,
+      "recall@0.3": 0.012,
+      "gt_boxes_large": 0,
+      "recall_large@0.5": null,
+      "yolo_labels@0.5": {
+        "boat": 2
+      }
+    }
+  },
+  "unmatched_yolo_labels": {
+    "truck": 870,
+    "boat": 630,
+    "person": 591,
+    "bus": 272,
+    "skateboard": 8,
+    "cat": 5,
+    "fire hydrant": 1,
+    "dog": 1,
+    "parking meter": 1,
+    "bicycle": 1,
+    "bench": 1
+  },
+  "suggested_label_aliases": {
+    "forklift": [],
+    "person": [
+      "person"
+    ],
+    "robot": [],
+    "transporter": []
+  }
+}

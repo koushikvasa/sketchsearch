@@ -5,5 +5,16 @@ description = "Sketch-based video moment search with AI verification"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "fastapi>=0.142.2",
     "huggingface-hub>=2.1.1",
+    "lap>=0.5.13",
+    "numpy>=2.5.3",
+    "open-clip-torch>=3.3.0",
+    "pydantic>=2.13.5",
+    "python-dotenv>=1.2.4",
+    "torch>=2.14.1",
+    "torchvision>=0.29.1",
+    "truststore>=0.10.4",
+    "ultralytics>=8.4.174",
+    "uvicorn[standard]>=0.54.0",
 ]
