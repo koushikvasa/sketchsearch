@@ -31,3 +31,12 @@ data/clip_*
 
 # Gemini verification cache
 data/verify_cache/
+
+# Demo-mode recordings (scripts/warm_demo.py)
+data/demo_cache/
+
+# Built by scripts/package_k8s.py
+deploy/k8s/build/
+
+# Friday probe output (scripts/vast_probe.py)
+data/vast_probe.json

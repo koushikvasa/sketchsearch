@@ -106,6 +106,10 @@ def _cache_path(segment_id: str, question: str):
     return VERIFY_CACHE_DIR / f"{segment_id}__{key}.json"
 
 
+def is_cached(segment_id: str, question: str) -> bool:
+    return _cache_path(segment_id, question).exists()
+
+
 @weave.op(name="verify_segment")
 def verify_segment(segment_id: str, question: str) -> dict:
     path = _cache_path(segment_id, question)
@@ -117,7 +121,7 @@ def verify_segment(segment_id: str, question: str) -> dict:
         out = parse_verdict(source.ask(segment_id, question))
         cacheable = True
     except VisionTimeout:
-        out = {"verdict": "UNSURE", "reason": f"The video model did not answer within {VERIFY_TIMEOUT_S} s."}
+        out = {"verdict": "UNSURE", "reason": f"The video model did not answer within {VERIFY_TIMEOUT_S:g} s."}
         cacheable = False
     except Exception as e:  # rate limits after all retries, network, ...
         out = {"verdict": "UNSURE", "reason": f"Verification failed: {type(e).__name__}: {str(e)[:160]}"}

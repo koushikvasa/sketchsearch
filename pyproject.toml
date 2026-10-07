@@ -25,6 +25,12 @@ dependencies = [
     "weave>=0.53.11",
 ]
 
+[project.optional-dependencies]
+vast = [
+    "pyarrow>=23.0.1",
+    "vastdb>=2.1.0",
+]
+
 [dependency-groups]
 dev = [
     "httpx>=0.28.1",

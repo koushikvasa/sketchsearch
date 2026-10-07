@@ -612,8 +612,12 @@ function renderResults(res, sketch) {
 function buildCard(r, rank, objects) {
   const el = $("#cardTpl").content.firstElementChild.cloneNode(true);
   const video = $("video", el);
-  video.src = r.clip_url;
-  video.poster = r.frame_url;
+  if (r.frame_url) {
+    video.src = r.clip_url;
+    video.poster = r.frame_url;
+  } else {
+    video.src = `${r.clip_url}#t=${(r.window[0] + r.window[1]) / 2}`; // no keyframe image: show a frame of the clip
+  }
   $(".rank", el).textContent = `#${rank}`;
   $(".seg", el).innerHTML = `${escapeHtml(cameraName(r.camera_id))} <small>${r.start}–${r.end} s · best ${r.window[0]}–${r.window[1]} s</small>`;
   $(".score", el).textContent = r.score.toFixed(2);
@@ -1146,7 +1150,8 @@ async function init() {
       b.title = p.description;
       b.addEventListener("click", () => {
         loadSketch(p.sketch, { cameraId: p.camera_id || state.cameraId });
-        runSearch();
+        // Demo mode: verdicts are pre-cached by scripts/warm_demo.py, so check right away.
+        runSearch().then(() => { if ($("#demoMode").checked && cards.length) runVerify(); });
       });
       holder.appendChild(b);
     }

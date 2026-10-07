@@ -1,0 +1,17 @@
+# Runtime-only dependencies for the deployed app (SOURCE=vast). Index building (torch, ultralytics,
+# open_clip) runs offline and is not needed in the pod.
+fastapi
+uvicorn[standard]
+pydantic
+python-dotenv
+python-multipart
+numpy
+scipy
+httpx
+openai
+google-genai
+weave
+pillow
+vastdb
+pyarrow
+truststore

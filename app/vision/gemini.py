@@ -102,3 +102,11 @@ def image_part(data: bytes, mime_type: str):
 def ask_video(path: Path, question: str) -> tuple[str, str]:
     """Inline video bytes (no file upload) + question -> (raw JSON text, model)."""
     return generate_json([video_part(path), question])
+
+
+def ask_video_bytes(data: bytes, question: str) -> tuple[str, str]:
+    from google.genai import types
+
+    part = types.Part(inline_data=types.Blob(data=data, mime_type="video/mp4"),
+                      video_metadata=types.VideoMetadata(fps=VIDEO_FPS))
+    return generate_json([part, question])

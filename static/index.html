@@ -14,13 +14,18 @@
       <span class="logo">SketchSearch</span>
       <span class="tagline">Words get you close. A sketch gets you exact. AI proves it.</span>
     </div>
-    <nav class="tabs" role="tablist">
-      <button class="tab active" role="tab" aria-selected="true">Search</button>
-      <button class="tab" role="tab" aria-selected="false" disabled title="Agent mode arrives in Phase 5">Agent</button>
-    </nav>
+    <div class="header-right">
+      <label class="check demo-toggle" title="Replay pre-computed agent runs and auto-run cached AI checks on presets (scripts/warm_demo.py)">
+        <input type="checkbox" id="demoMode"> 🎬 Demo mode
+      </label>
+      <nav class="tabs" role="tablist">
+        <button class="tab active" role="tab" data-view="search" aria-selected="true">Search</button>
+        <button class="tab" role="tab" data-view="agent" aria-selected="false">Agent</button>
+      </nav>
+    </div>
   </header>
 
-  <main class="layout">
+  <main class="layout" id="searchView">
     <!-- ================= Left: sketch ================= -->
     <section class="panel sketch-panel" aria-label="Sketch">
       <div class="row presets" id="presets" aria-label="Demo presets"></div>
@@ -94,6 +99,30 @@
     </section>
   </main>
 
+  <main class="agent-layout" id="agentView" hidden>
+    <section class="panel agent-panel" aria-label="Agent">
+      <form class="row agent-form" id="agentForm">
+        <input id="agentGoal" type="text" autocomplete="off" placeholder="What should the agent look for? e.g. risky moments near the forklift">
+        <button type="submit" id="agentRun" class="primary">Run agent</button>
+      </form>
+      <div class="row">
+        <button id="agentPreset" class="preset-goal"></button>
+        <span class="muted small" id="agentHint">The agent plans 3-4 sketches, searches, has the video model check the top 3 of each,
+          refines weak sketches once, and writes a report. At most 12 new video-model calls per run.</span>
+      </div>
+      <h2 class="agent-h">Trace</h2>
+      <ol class="trace" id="trace"><li class="trace-empty muted">Run the agent to see its plan, searches and checks here.</li></ol>
+    </section>
+    <section class="panel report-panel" aria-label="Report">
+      <div class="results-head">
+        <h2>Report</h2>
+        <span class="status" id="agentStatus"></span>
+        <button id="copyReport" disabled>Copy markdown</button>
+      </div>
+      <article class="report" id="report"><p class="muted">The agent's report appears here when the run finishes.</p></article>
+    </section>
+  </main>
+
   <template id="cardTpl">
     <article class="card">
       <div class="media">
@@ -124,5 +153,6 @@
   </template>
 
   <script src="static/app.js"></script>
+  <script src="static/agent.js"></script>
 </body>
 </html>

@@ -11,15 +11,17 @@ from app.models import Box, Sketch, SketchObject
 from app.presets import FORKLIFT, PERSON, moving
 from app.sketch_json import SKETCH_FORMAT, SketchParseError, parse_sketch
 
-SYSTEM = f"""You turn a description of a moment in warehouse CCTV into a search sketch.
-
-The cameras are fixed and look down a warehouse aisle. The far end of the aisle is the top-centre of the
+SCENE = """The cameras are fixed and look down a warehouse aisle. The far end of the aisle is the top-centre of the
 frame (y about 0.05-0.2); the area near the camera is the bottom (y about 0.6-0.95); shelving fills the
 left and right edges. Things far away are small: a far person is about 0.02 wide x 0.09 tall, a near
 person about 0.05 x 0.22. A forklift is usually at the far end, about 0.04 x 0.10. A robot (small mobile
 robot) is about 0.04 x 0.04; a transporter (low cart) about 0.06 x 0.04.
 A sketch covers about 1.5 seconds: a walking person moves about 0.05-0.15 in that time. "Toward" /
-"approaching" means the path heads at the other object's centre; "away" means the opposite.
+"approaching" means the path heads at the other object's centre; "away" means the opposite."""
+
+SYSTEM = f"""You turn a description of a moment in warehouse CCTV into a search sketch.
+
+{SCENE}
 Only draw what the description mentions. If it mentions no position, pick a natural one in the aisle.
 
 {SKETCH_FORMAT}"""

@@ -106,7 +106,7 @@ def test_verify_segment_caches_and_turns_timeouts_into_unsure(tmp_path, monkeypa
 
     fake.mode = "timeout"
     out = verify.verify_segment("seg_2", "Q?")
-    assert out["verdict"] == "UNSURE" and "20 s" in out["reason"]
+    assert out["verdict"] == "UNSURE" and f"{verify.VERIFY_TIMEOUT_S:g} s" in out["reason"]
     assert not list(tmp_path.glob("seg_2__*"))  # timeouts are not cached
 
 

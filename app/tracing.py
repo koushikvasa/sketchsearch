@@ -24,3 +24,7 @@ def init_tracing() -> bool:
     except Exception as e:  # tracing must never take the app down
         log.warning("Weave tracing disabled: %s", e)
     return _ready
+
+
+def is_ready() -> bool:
+    return _ready

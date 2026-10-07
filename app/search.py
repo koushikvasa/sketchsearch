@@ -14,13 +14,30 @@ def get_matcher() -> Matcher:
     return Matcher(source.candidates(set()), getattr(source, "label_aliases", {}))
 
 
+def _caption_fallback(source, sketch: Sketch) -> tuple[Sketch, set[str] | None]:
+    """Labels the detector can't see (source.caption_labels, e.g. forklift on COCO YOLO): keep only
+    segments whose captions mention them and match the rest of the sketch geometrically."""
+    labels = getattr(source, "caption_labels", set()) & {o.label for o in sketch.objects if not o.absent}
+    if not labels:
+        return sketch, None
+    tagged: set[str] | None = None
+    for label in labels:
+        hits = source.caption_tagged(label)
+        tagged = hits if tagged is None else tagged & hits
+    rest = [o for o in sketch.objects if o.label not in labels or o.absent]
+    return sketch.model_copy(update={"objects": rest}), tagged
+
+
 def run_search(sketch: Sketch, top_n: int = 20, weights: dict[str, float] | None = None) -> dict:
     t = time.perf_counter()
     source = get_source()
     segment_ids = None
     if TEXT_PREFILTER and sketch.text:
         segment_ids = [sid for sid, _ in source.text_search(sketch.text, k=200)]
-    results = get_matcher().search(sketch, weights=weights, segment_ids=segment_ids, top_n=top_n)
+    match_sketch, tagged = _caption_fallback(source, sketch)
+    if tagged is not None:
+        segment_ids = list(tagged if segment_ids is None else set(segment_ids) & tagged)
+    results = get_matcher().search(match_sketch, weights=weights, segment_ids=segment_ids, top_n=top_n)
     for r in results:
         seg = source.get_segment(r["segment_id"])
         r.update(camera_id=seg.camera_id, start=seg.start, end=seg.end,

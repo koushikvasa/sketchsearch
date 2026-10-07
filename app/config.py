@@ -48,7 +48,7 @@ VISION_PROVIDER = os.getenv("VISION_PROVIDER", "gemini").strip().lower()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL") or "gemini-3.5-flash-lite"
 GEMINI_FALLBACK_MODEL = os.getenv("GEMINI_FALLBACK_MODEL", "")
-VERIFY_TIMEOUT_S = 20
+VERIFY_TIMEOUT_S = float(os.getenv("VERIFY_TIMEOUT_S", "30"))
 VERIFY_CONCURRENCY = 3
 
 # Sketch label -> track labels of the YOLO (COCO) index, from data/alias_report.json. YOLO11 never
