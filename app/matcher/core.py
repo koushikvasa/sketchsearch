@@ -20,6 +20,9 @@ PLAN_WEIGHTS = {"relations": 0.35, "position": 0.25, "motion": 0.25, "size": 0.1
 # End layout (keyframe) and size carry the motion signal more reliably than path shape/direction.
 DEFAULT_WEIGHTS = {"relations": 0.15, "position": 0.35, "motion": 0.05, "size": 0.20, "keyframe": 0.25}
 COMPONENTS = list(PLAN_WEIGHTS)
+# A sketch that clearly draws movement gets motion back at this weight (others renormalized).
+CLEAR_MOTION = 0.10
+CLEAR_MOTION_WEIGHT = 0.25
 WINDOW = 1.5  # seconds a sketch (Start -> End) represents
 WINDOW_STEP = 0.5
 PATH_POINTS = 16
@@ -49,6 +52,34 @@ def resample_path(points) -> np.ndarray:
 
 def _center(box) -> np.ndarray:
     return np.array([box.x + box.w / 2, box.y + box.h / 2])
+
+
+def object_displacement(o: SketchObject) -> float:
+    """How far the sketch says an object moves: path start->end, or start box -> end box."""
+    d = 0.0
+    if o.path and len(o.path) >= 2:
+        d = float(np.hypot(o.path[-1][0] - o.path[0][0], o.path[-1][1] - o.path[0][1]))
+    if o.end_box is not None:
+        d = max(d, float(np.linalg.norm(_center(o.end_box) - _center(o.start_box))))
+    return d
+
+
+def has_clear_motion(sketch: Sketch) -> bool:
+    return any(object_displacement(o) >= CLEAR_MOTION for o in sketch.objects if not o.absent)
+
+
+def effective_weights(sketch: Sketch, weights: dict[str, float] | None = None, adaptive: bool | None = None) -> dict:
+    """Weights a search uses. Adaptive (the default when no weights are given): sketches with clear
+    motion get motion = CLEAR_MOTION_WEIGHT and the other weights scaled to keep the same total."""
+    w = {**DEFAULT_WEIGHTS, **(weights or {})}
+    if adaptive is None:
+        adaptive = weights is None
+    if adaptive and has_clear_motion(sketch) and w["motion"] < CLEAR_MOTION_WEIGHT:
+        total = sum(w.values())
+        rest = total - w["motion"]
+        scale = (total - CLEAR_MOTION_WEIGHT) / rest if rest > 0 else 0.0
+        w = {k: (CLEAR_MOTION_WEIGHT if k == "motion" else v * scale) for k, v in w.items()}
+    return w
 
 
 def _xyxy(box) -> np.ndarray:
@@ -302,8 +333,9 @@ class Matcher:
         segment_ids: list[str] | None = None,
         camera_ids: list[str] | None = None,
         top_n: int | None = None,
+        adaptive: bool | None = None,
     ) -> list[dict]:
-        w = {**DEFAULT_WEIGHTS, **(weights or {})}
+        w = effective_weights(sketch, weights, adaptive)
         present = [o for o in sketch.objects if not o.absent]
         absent = [o for o in sketch.objects if o.absent]
         k = len(present)

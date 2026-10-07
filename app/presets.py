@@ -1,0 +1,52 @@
+"""Demo sketches: shown as preset buttons in the UI and printed by scripts/example_searches.py."""
+
+from app.models import Box, Sketch, SketchObject
+
+PERSON = (0.025, 0.12)
+FORKLIFT = (0.035, 0.095)
+
+
+def box(cx, cy, size) -> Box:
+    return Box(x=round(cx - size[0] / 2, 4), y=round(cy - size[1] / 2, 4), w=size[0], h=size[1])
+
+
+def moving(id, label, start, end, size) -> SketchObject:
+    return SketchObject(id=id, label=label, start_box=box(*start, size), end_box=box(*end, size), path=[start, end])
+
+
+def two_people(converging: bool = True) -> Sketch:
+    """Two people in the aisle walking toward (or, same start layout, away from) each other."""
+    upper, lower = ((0.46, 0.30), (0.47, 0.42)), ((0.50, 0.64), (0.49, 0.52))
+    if not converging:
+        upper, lower = (upper[0], (0.45, 0.18)), (lower[0], (0.51, 0.76))
+    return Sketch(objects=[
+        moving("upper", "person", *upper, PERSON),
+        moving("lower", "person", *lower, (0.04, 0.2)),
+    ])
+
+
+PRESETS: dict[str, dict] = {
+    "converging": {
+        "title": "Two people converging",
+        "description": "Two people in the aisle walking toward each other",
+        "sketch": two_people(converging=True),
+    },
+    "forklift_approach": {
+        "title": "Person approaches forklift",
+        "description": "A worker walks up to the forklift at the end of the aisle",
+        "sketch": Sketch(objects=[
+            moving("forklift", "forklift", (0.45, 0.10), (0.45, 0.10), FORKLIFT),
+            moving("worker", "person", (0.50, 0.26), (0.48, 0.17), PERSON),
+        ]),
+        "camera_id": "warehouse_cam1",
+    },
+    "forklift_alone": {
+        "title": "Forklift, nobody nearby",
+        "description": "Forklift with no person inside the zone around it",
+        "sketch": Sketch(objects=[
+            moving("forklift", "forklift", (0.45, 0.10), (0.45, 0.10), FORKLIFT),
+            SketchObject(id="nobody", label="person", start_box=Box(x=0.30, y=0.0, w=0.30, h=0.30), absent=True),
+        ]),
+        "camera_id": "warehouse_cam1",
+    },
+}

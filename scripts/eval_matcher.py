@@ -119,9 +119,13 @@ def build_query(seg: Segment, category: str, rng: np.random.Generator) -> dict:
         near = sorted(persons, key=lambda tp: np.hypot(tp[1][0].box.x - ac.x, tp[1][0].box.y - ac.y))
         chosen = [anchor] + near[:k_p]
     objects = [noisy_object(f"o{i + 1}", tr.label, pts, rng) for i, (tr, pts) in enumerate(chosen)]
+    true_motion = max(np.hypot(pts[-1].box.x - pts[0].box.x + (pts[-1].box.w - pts[0].box.w) / 2,
+                               pts[-1].box.y - pts[0].box.y + (pts[-1].box.h - pts[0].box.h) / 2)
+                      for _, pts in chosen)
     return {
         "segment_id": seg.segment_id, "camera_id": seg.camera_id, "start": seg.start, "category": category,
         "window": [t0, t0 + WINDOW], "labels": [o.label for o in objects],
+        "true_motion": round(float(true_motion), 4),  # largest real (noise-free) displacement drawn
         "sketch": Sketch(objects=objects),
     }
 
@@ -154,7 +158,8 @@ def metrics(ranks: list[int | None], lenient: list[int | None]) -> dict:
     }
 
 
-def run_config(name: str, weights: dict, matcher: Matcher, queries: list[dict], segments: dict) -> dict:
+def run_config(name: str, weights: dict | None, matcher: Matcher, queries: list[dict], segments: dict) -> dict:
+    """weights=None runs the production default: tuned weights with the adaptive motion weight."""
     ranks, lenient, lat = [], [], []
     for q in queries:
         t = time.perf_counter()
@@ -173,7 +178,8 @@ def run_config(name: str, weights: dict, matcher: Matcher, queries: list[dict], 
         idx = [i for i, q in enumerate(queries) if len(q["labels"]) == k]
         by_k[f"{k}_objects"] = metrics([ranks[i] for i in idx], [lenient[i] for i in idx])
     return {
-        "weights": weights, "overall": metrics(ranks, lenient), "by_category": by_cat, "by_object_count": by_k,
+        "weights": weights if weights is not None else "adaptive (tuned + motion 0.25 on clear motion)",
+        "overall": metrics(ranks, lenient), "by_category": by_cat, "by_object_count": by_k,
         "latency_ms": {"mean": round(float(np.mean(lat)), 1), "p95": round(float(np.percentile(lat, 95)), 1)},
     }
 
@@ -190,6 +196,55 @@ def latency_at_scale(segments: list[Segment], queries: list[dict], copies: int =
             "max_ms": round(float(np.max(lat)), 1)}
 
 
+# ---------- direction check ----------
+
+def flip_direction(sketch: Sketch) -> Sketch:
+    """Same start boxes, every drawn movement mirrored through its start (walks the other way)."""
+    objects = []
+    for o in sketch.objects:
+        if o.absent or not (o.path or o.end_box):
+            objects.append(o)
+            continue
+        sx, sy = o.start_box.x + o.start_box.w / 2, o.start_box.y + o.start_box.h / 2
+        path = [(round(2 * sx - x, 4), round(2 * sy - y, 4)) for x, y in o.path] if o.path else None
+        end = None
+        if o.end_box:
+            e = o.end_box
+            end = _clamp_box(2 * sx - (e.x + e.w / 2), 2 * sy - (e.y + e.h / 2), e.w, e.h)
+        objects.append(o.model_copy(update={"path": path, "end_box": end}))
+    return Sketch(objects=objects)
+
+
+def time_reverse(sketch: Sketch) -> Sketch:
+    """The same drawing played backwards: start and end boxes swapped, path reversed."""
+    return Sketch(objects=[
+        o if o.absent or o.end_box is None
+        else o.model_copy(update={"start_box": o.end_box, "end_box": o.start_box,
+                                  "path": list(reversed(o.path)) if o.path else None})
+        for o in sketch.objects
+    ])
+
+
+def direction_check(matcher: Matcher, queries: list[dict], min_motion: float = 0.1) -> dict:
+    """For queries whose real tracks clearly move, the source segment must score higher for the
+    correctly drawn direction than for the reversed one (target: >= 80% of cases)."""
+    clear = [q for q in queries if q["true_motion"] >= min_motion]
+    out = {"min_true_motion": min_motion, "n_clear_motion": len(clear), "n_queries": len(queries)}
+    for name, weights in (("adaptive", None), ("tuned_static", DEFAULT_WEIGHTS), ("plan", PLAN_WEIGHTS)):
+        row = {}
+        for kind, transform in (("flipped", flip_direction), ("time_reversed", time_reverse)):
+            wins = 0
+            for q in clear:
+                ids = [q["segment_id"]]
+                good = matcher.search(q["sketch"], weights=weights, segment_ids=ids)
+                bad = matcher.search(transform(q["sketch"]), weights=weights, segment_ids=ids)
+                wins += bool(good) and (not bad or good[0]["score"] > bad[0]["score"])
+            row[kind] = round(wins / len(clear), 3) if clear else None
+        out[name] = row
+    out["pass"] = bool(clear) and out["adaptive"]["flipped"] >= 0.8 and out["adaptive"]["time_reversed"] >= 0.8
+    return out
+
+
 def ablate(weights: dict, drop: str) -> dict:
     return {**weights, drop: 0.0}
 
@@ -201,7 +256,7 @@ def print_table(configs: dict):
         print(f"{name:16s} {o['recall@1']:6.3f} {o['recall@5']:6.3f} {o['recall@10']:6.3f} {o['mrr']:6.3f} "
               f"{o['lenient_recall@5']:7.3f} {c['latency_ms']['mean']:6.1f}")
     for name in configs:
-        if name.startswith("no_") or name == "plan":
+        if name.startswith("no_") or name in ("plan", "tuned"):
             continue
         print(f"\n{name} by category / object count:")
         for group in ("by_category", "by_object_count"):
@@ -243,9 +298,11 @@ def main():
     prep_s = round(time.perf_counter() - t, 2)
 
     tuned = {**DEFAULT_WEIGHTS, **(args.weights or {})}
-    plan_runs = {"plan": (PLAN_WEIGHTS, queries), "tuned": (tuned, queries)}
+    plan_runs = {"plan": (PLAN_WEIGHTS, queries), "tuned": (tuned, queries),
+                 "tuned_adaptive": (None if not args.weights else tuned, queries)}
     plan_runs |= {f"no_{c}": (ablate(tuned, c), queries) for c in ("relations", "motion", "position")}
-    plan_runs |= {"holdout_plan": (PLAN_WEIGHTS, holdout), "holdout_tuned": (tuned, holdout)}
+    plan_runs |= {"holdout_plan": (PLAN_WEIGHTS, holdout), "holdout_tuned": (tuned, holdout),
+                  "holdout_tuned_adaptive": (None if not args.weights else tuned, holdout)}
 
     use_weave = not args.no_weave and bool(os.getenv("WANDB_API_KEY"))
     run = lambda name, weights, qs: run_config(name, weights, matcher, qs, seg_by_id)  # noqa: E731
@@ -256,6 +313,7 @@ def main():
         run = weave.op(name="matcher_eval_config")(run)
     configs = {name: run(name, w, qs) for name, (w, qs) in plan_runs.items()}
 
+    direction = {f"min_motion_{m}": direction_check(matcher, queries + holdout, m) for m in (0.1, 0.05)}
     scale = latency_at_scale(segments, queries)
     report = {
         "meta": {
@@ -269,12 +327,20 @@ def main():
             "tuning": "one grid search over weights on the seed-42 queries; holdout_* rows use unseen queries",
         },
         "configs": configs,
+        "direction_check": direction,
         "latency_at_scale": scale,
         "queries": [{k: v for k, v in q.items() if k != "sketch"} | {"sketch": q["sketch"].model_dump()}
                     for q in queries],
     }
     REPORT.write_text(json.dumps(report, indent=1))
     print_table(configs)
+    for d in direction.values():
+        print(f"\ndirection check: {d['n_clear_motion']} of {d['n_queries']} queries with real motion >= "
+              f"{d['min_true_motion']}; share where the correct direction outscores the reversed one")
+        for name in ("adaptive", "tuned_static", "plan"):
+            print(f"  {name:13s} flipped-at-start {d[name]['flipped']:.3f}   "
+                  f"time-reversed {d[name]['time_reversed']:.3f}")
+        print(f"  target >= 0.8 with adaptive weights: {'PASS' if d['pass'] else 'FAIL'}")
     print(f"\nlatency: {configs['tuned']['latency_ms']} on {len(segments)} segments; "
           f"{scale['mean_ms']} ms mean / {scale['max_ms']} ms max on {scale['segments']} segments")
     print(f"wrote {REPORT.relative_to(DATA_DIR.parent)}")

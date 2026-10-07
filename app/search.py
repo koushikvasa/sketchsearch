@@ -2,7 +2,7 @@ import time
 from functools import lru_cache
 
 from app.config import TEXT_PREFILTER
-from app.matcher import Matcher
+from app.matcher import Matcher, effective_weights
 from app.models import Sketch
 from app.sources import get_source
 
@@ -26,6 +26,7 @@ def run_search(sketch: Sketch, top_n: int = 20, weights: dict[str, float] | None
                  clip_url=source.clip_url(seg.segment_id), frame_url=source.frame_url(seg.segment_id))
     return {
         "results": results,
+        "weights": {k: round(v, 3) for k, v in effective_weights(sketch, weights).items()},
         "text_prefilter": segment_ids is not None,
         "elapsed_ms": round((time.perf_counter() - t) * 1000, 1),
     }

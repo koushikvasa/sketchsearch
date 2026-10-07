@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SketchSearch</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E✎%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="static/style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">SketchSearch</span>
+      <span class="tagline">Words get you close. A sketch gets you exact. AI proves it.</span>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button class="tab active" role="tab" aria-selected="true">Search</button>
+      <button class="tab" role="tab" aria-selected="false" disabled title="Agent mode arrives in Phase 5">Agent</button>
+    </nav>
+  </header>
+
+  <main class="layout">
+    <!-- ================= Left: sketch ================= -->
+    <section class="panel sketch-panel" aria-label="Sketch">
+      <div class="row presets" id="presets" aria-label="Demo presets"></div>
+
+      <div class="row controls">
+        <label class="field">Camera
+          <select id="camera"></select>
+        </label>
+        <label class="check"><input type="checkbox" id="showFrame" checked> Show frame</label>
+        <label class="check"><input type="checkbox" id="onlyCamera"> Only this camera</label>
+      </div>
+
+      <div class="row toolbar">
+        <div class="group" id="palette" role="radiogroup" aria-label="Object label"></div>
+        <div class="group" role="radiogroup" aria-label="Tool">
+          <button class="tool active" data-tool="box" title="Draw a box (B)">▭ Box</button>
+          <button class="tool" data-tool="path" title="Drag from an object to draw its path (P)">➚ Path</button>
+          <button class="tool" data-tool="absent" title="Nobody-here zone for the selected label (N)">🚫 Absent</button>
+        </div>
+      </div>
+
+      <div class="row toolbar">
+        <div class="group keyframes" role="tablist" aria-label="Keyframe">
+          <button class="kf active" data-tab="start">Start</button>
+          <button class="kf" data-tab="end">End</button>
+        </div>
+        <span class="kf-help" id="kfHelp">Draw where things are at the start.</span>
+        <div class="group right">
+          <button id="undo" title="Undo (Ctrl+Z)">↶ Undo</button>
+          <button id="delete" title="Delete selected (Del)">✕ Delete</button>
+          <button id="clear" title="Remove everything">Clear</button>
+        </div>
+      </div>
+
+      <div class="canvas-wrap" id="canvasWrap">
+        <canvas id="sketch"></canvas>
+        <div class="canvas-empty" id="canvasEmpty">Drag on the frame to draw a box, or pick a demo preset above.</div>
+      </div>
+
+      <div class="hint" id="hint" hidden>💡 Tip: add a second object or a path. Relationships make search precise.</div>
+      <div class="toast" id="toast" hidden></div>
+
+      <div class="row text-row">
+        <input id="sketchText" type="text" disabled placeholder="✨ Describe the moment, e.g. “worker on the left, forklift coming at them” (Phase 4)">
+        <button disabled title="Words → Sketch arrives in Phase 4">✨ Sketch it</button>
+      </div>
+
+      <button id="search" class="primary big">Search</button>
+    </section>
+
+    <!-- ================= Right: results ================= -->
+    <section class="panel results-panel" aria-label="Results">
+      <div class="results-head">
+        <h2>Results</h2>
+        <span class="status" id="status">Draw a sketch and press Search.</span>
+        <span class="verify-summary" title="AI verification arrives in Phase 4">AI verified: — of —</span>
+      </div>
+      <div class="legend">
+        <span><i class="sw solid"></i> real track</span>
+        <span><i class="sw dashed"></i> your sketch</span>
+        <span><i class="sw ghost"></i> ghost replay of your path</span>
+      </div>
+      <div id="results" class="results"></div>
+    </section>
+  </main>
+
+  <template id="cardTpl">
+    <article class="card">
+      <div class="media">
+        <video muted playsinline loop preload="metadata"></video>
+        <canvas class="overlay"></canvas>
+        <div class="timeline"><div class="win"></div><div class="head"></div></div>
+        <span class="rank"></span>
+        <span class="play-hint">hover or click to play</span>
+      </div>
+      <div class="card-body">
+        <div class="card-title">
+          <span class="seg"></span>
+          <span class="score"></span>
+        </div>
+        <div class="badges">
+          <span class="badge absence" hidden></span>
+          <span class="badge verify pending" title="AI verification arrives in Phase 4">AI check · soon</span>
+        </div>
+        <div class="bars"></div>
+        <div class="card-actions">
+          <button class="more">More like this</button>
+        </div>
+      </div>
+    </article>
+  </template>
+
+  <script src="static/app.js"></script>
+</body>
+</html>

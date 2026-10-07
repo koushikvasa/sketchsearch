@@ -64,3 +64,33 @@ def test_api_search_and_as_sketch_round_trip():
     assert set(top) >= {"score", "components", "assignment", "window", "absence_ok", "camera_id"}
 
     assert client.get("/api/segments/nope/as-sketch").status_code == 404
+
+
+def _pair_distance_change(source, result) -> float:
+    """How much the two matched real tracks' distance changes over the result window."""
+    seg = source.get_segment(result["segment_id"])
+    t0, t1 = result["window"]
+    tracks = {t.track_id: t for t in seg.tracks}
+    ends = []
+    for track_id in result["assignment"].values():
+        pts = [p for p in tracks[track_id].points if t0 - 1e-6 <= p.t <= t1 + 1e-6]
+        ends.append([(p.box.x + p.box.w / 2, p.box.y + p.box.h / 2) for p in (pts[0], pts[-1])])
+    (a0, a1), (b0, b1) = ends
+    dist = lambda p, q: ((p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2) ** 0.5  # noqa: E731
+    return dist(a1, b1) - dist(a0, b0)
+
+
+def test_converging_vs_diverging_rank_different_real_segments(source, matcher):
+    """Same start layout, arrows reversed: the adaptive motion weight must change what comes first."""
+    from app.matcher import has_clear_motion
+    from app.presets import two_people
+
+    converging, diverging = two_people(converging=True), two_people(converging=False)
+    assert [o.start_box for o in converging.objects] == [o.start_box for o in diverging.objects]
+    assert has_clear_motion(converging) and has_clear_motion(diverging)
+
+    top_c = matcher.search(converging, top_n=1)[0]
+    top_d = matcher.search(diverging, top_n=1)[0]
+    assert top_c["segment_id"] != top_d["segment_id"]
+    assert _pair_distance_change(source, top_c) < 0  # the matched people really get closer
+    assert _pair_distance_change(source, top_d) > 0  # ... and really move apart

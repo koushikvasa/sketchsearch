@@ -1,10 +1,10 @@
 {
  "meta": {
-  "built_at": "2026-10-07T16:11:30+00:00",
+  "built_at": "2026-10-07T16:36:48+00:00",
   "index": "gt",
   "segments": 308,
   "windows": 1848,
-  "prepare_s": 3.87,
+  "prepare_s": 3.0,
   "n_queries": 100,
   "seed": 42,
   "holdout_seed": 7,
@@ -118,8 +118,8 @@
     }
    },
    "latency_ms": {
-    "mean": 90.5,
-    "p95": 152.0
+    "mean": 64.3,
+    "p95": 110.8
    }
   },
   "tuned": {
@@ -191,8 +191,75 @@
     }
    },
    "latency_ms": {
-    "mean": 87.0,
-    "p95": 142.8
+    "mean": 40.7,
+    "p95": 116.3
+   }
+  },
+  "tuned_adaptive": {
+   "weights": "adaptive (tuned + motion 0.25 on clear motion)",
+   "overall": {
+    "n": 100,
+    "recall@1": 0.56,
+    "recall@5": 0.82,
+    "recall@10": 0.91,
+    "mrr": 0.679,
+    "lenient_recall@5": 0.88
+   },
+   "by_category": {
+    "person_forklift": {
+     "n": 16,
+     "recall@1": 0.562,
+     "recall@5": 0.938,
+     "recall@10": 1.0,
+     "mrr": 0.718,
+     "lenient_recall@5": 0.938
+    },
+    "person_only": {
+     "n": 70,
+     "recall@1": 0.571,
+     "recall@5": 0.771,
+     "recall@10": 0.886,
+     "mrr": 0.671,
+     "lenient_recall@5": 0.843
+    },
+    "vehicle": {
+     "n": 14,
+     "recall@1": 0.5,
+     "recall@5": 0.929,
+     "recall@10": 0.929,
+     "mrr": 0.676,
+     "lenient_recall@5": 1.0
+    }
+   },
+   "by_object_count": {
+    "1_objects": {
+     "n": 30,
+     "recall@1": 0.267,
+     "recall@5": 0.6,
+     "recall@10": 0.767,
+     "mrr": 0.435,
+     "lenient_recall@5": 0.7
+    },
+    "2_objects": {
+     "n": 40,
+     "recall@1": 0.65,
+     "recall@5": 0.875,
+     "recall@10": 0.975,
+     "mrr": 0.747,
+     "lenient_recall@5": 0.925
+    },
+    "3_objects": {
+     "n": 30,
+     "recall@1": 0.733,
+     "recall@5": 0.967,
+     "recall@10": 0.967,
+     "mrr": 0.832,
+     "lenient_recall@5": 1.0
+    }
+   },
+   "latency_ms": {
+    "mean": 79.4,
+    "p95": 144.3
    }
   },
   "no_relations": {
@@ -264,8 +331,8 @@
     }
    },
    "latency_ms": {
-    "mean": 87.5,
-    "p95": 143.9
+    "mean": 87.7,
+    "p95": 144.7
    }
   },
   "no_motion": {
@@ -337,8 +404,8 @@
     }
    },
    "latency_ms": {
-    "mean": 83.0,
-    "p95": 131.9
+    "mean": 96.1,
+    "p95": 162.8
    }
   },
   "no_position": {
@@ -410,8 +477,8 @@
     }
    },
    "latency_ms": {
-    "mean": 81.7,
-    "p95": 132.5
+    "mean": 91.9,
+    "p95": 164.3
    }
   },
   "holdout_plan": {
@@ -483,8 +550,8 @@
     }
    },
    "latency_ms": {
-    "mean": 82.9,
-    "p95": 136.5
+    "mean": 88.7,
+    "p95": 145.6
    }
   },
   "holdout_tuned": {
@@ -556,16 +623,121 @@
     }
    },
    "latency_ms": {
-    "mean": 90.5,
-    "p95": 150.4
+    "mean": 82.2,
+    "p95": 129.5
    }
+  },
+  "holdout_tuned_adaptive": {
+   "weights": "adaptive (tuned + motion 0.25 on clear motion)",
+   "overall": {
+    "n": 100,
+    "recall@1": 0.59,
+    "recall@5": 0.85,
+    "recall@10": 0.9,
+    "mrr": 0.702,
+    "lenient_recall@5": 0.88
+   },
+   "by_category": {
+    "person_forklift": {
+     "n": 16,
+     "recall@1": 0.812,
+     "recall@5": 1.0,
+     "recall@10": 1.0,
+     "mrr": 0.88,
+     "lenient_recall@5": 1.0
+    },
+    "person_only": {
+     "n": 70,
+     "recall@1": 0.543,
+     "recall@5": 0.8,
+     "recall@10": 0.871,
+     "mrr": 0.659,
+     "lenient_recall@5": 0.829
+    },
+    "vehicle": {
+     "n": 14,
+     "recall@1": 0.571,
+     "recall@5": 0.929,
+     "recall@10": 0.929,
+     "mrr": 0.713,
+     "lenient_recall@5": 1.0
+    }
+   },
+   "by_object_count": {
+    "1_objects": {
+     "n": 30,
+     "recall@1": 0.333,
+     "recall@5": 0.633,
+     "recall@10": 0.8,
+     "mrr": 0.471,
+     "lenient_recall@5": 0.7
+    },
+    "2_objects": {
+     "n": 35,
+     "recall@1": 0.629,
+     "recall@5": 0.886,
+     "recall@10": 0.886,
+     "mrr": 0.733,
+     "lenient_recall@5": 0.914
+    },
+    "3_objects": {
+     "n": 35,
+     "recall@1": 0.771,
+     "recall@5": 1.0,
+     "recall@10": 1.0,
+     "mrr": 0.869,
+     "lenient_recall@5": 1.0
+    }
+   },
+   "latency_ms": {
+    "mean": 84.1,
+    "p95": 143.1
+   }
+  }
+ },
+ "direction_check": {
+  "min_motion_0.1": {
+   "min_true_motion": 0.1,
+   "n_clear_motion": 19,
+   "n_queries": 200,
+   "adaptive": {
+    "flipped": 1.0,
+    "time_reversed": 1.0
+   },
+   "tuned_static": {
+    "flipped": 1.0,
+    "time_reversed": 1.0
+   },
+   "plan": {
+    "flipped": 1.0,
+    "time_reversed": 1.0
+   },
+   "pass": true
+  },
+  "min_motion_0.05": {
+   "min_true_motion": 0.05,
+   "n_clear_motion": 69,
+   "n_queries": 200,
+   "adaptive": {
+    "flipped": 1.0,
+    "time_reversed": 0.986
+   },
+   "tuned_static": {
+    "flipped": 1.0,
+    "time_reversed": 0.986
+   },
+   "plan": {
+    "flipped": 0.942,
+    "time_reversed": 0.957
+   },
+   "pass": true
   }
  },
  "latency_at_scale": {
   "segments": 2156,
   "queries": 10,
-  "mean_ms": 619.1,
-  "max_ms": 851.6
+  "mean_ms": 600.9,
+  "max_ms": 922.8
  },
  "queries": [
   {
@@ -582,9 +754,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0137,
    "ranks": {
     "plan": 2,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -726,9 +900,11 @@
     "forklift",
     "person"
    ],
+   "true_motion": 0.0123,
    "ranks": {
     "plan": 6,
     "tuned": 8,
+    "tuned_adaptive": 8,
     "no_relations": 8,
     "no_motion": 8,
     "no_position": 8
@@ -823,9 +999,11 @@
     "forklift",
     "person"
    ],
+   "true_motion": 0.0321,
    "ranks": {
     "plan": 2,
     "tuned": 3,
+    "tuned_adaptive": 3,
     "no_relations": 1,
     "no_motion": 2,
     "no_position": 3
@@ -921,9 +1099,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0625,
    "ranks": {
     "plan": 3,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -1049,9 +1229,11 @@
     "forklift",
     "person"
    ],
+   "true_motion": 0.0086,
    "ranks": {
     "plan": 3,
     "tuned": 3,
+    "tuned_adaptive": 3,
     "no_relations": 3,
     "no_motion": 3,
     "no_position": 1
@@ -1139,9 +1321,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0178,
    "ranks": {
     "plan": 3,
     "tuned": 2,
+    "tuned_adaptive": 2,
     "no_relations": 2,
     "no_motion": 1,
     "no_position": 2
@@ -1263,9 +1447,11 @@
     "forklift",
     "person"
    ],
+   "true_motion": 0.0203,
    "ranks": {
     "plan": 1,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 2,
     "no_motion": 1,
     "no_position": 1
@@ -1360,9 +1546,11 @@
     "forklift",
     "person"
    ],
+   "true_motion": 0.0186,
    "ranks": {
     "plan": 11,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -1458,9 +1646,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0146,
    "ranks": {
     "plan": 1,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -1598,9 +1788,11 @@
     "forklift",
     "person"
    ],
+   "true_motion": 0.0019,
    "ranks": {
     "plan": 9,
     "tuned": 5,
+    "tuned_adaptive": 5,
     "no_relations": 4,
     "no_motion": 5,
     "no_position": 5
@@ -1704,9 +1896,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0292,
    "ranks": {
     "plan": 1,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -1828,9 +2022,11 @@
     "forklift",
     "person"
    ],
+   "true_motion": 0.0127,
    "ranks": {
     "plan": 2,
     "tuned": 1,
+    "tuned_adaptive": 2,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -1918,9 +2114,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.031,
    "ranks": {
     "plan": 2,
     "tuned": 1,
+    "tuned_adaptive": 2,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -2047,9 +2245,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0555,
    "ranks": {
     "plan": 2,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -2183,9 +2383,11 @@
     "forklift",
     "person"
    ],
+   "true_motion": 0.0204,
    "ranks": {
     "plan": 1,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -2273,9 +2475,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0328,
    "ranks": {
     "plan": 2,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -2405,9 +2609,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0742,
    "ranks": {
     "plan": 4,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 2,
     "no_position": 1
@@ -2491,9 +2697,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0646,
    "ranks": {
     "plan": 1,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -2611,9 +2819,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.024,
    "ranks": {
     "plan": 12,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -2708,9 +2918,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.1157,
    "ranks": {
     "plan": 1,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -2805,9 +3017,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0297,
    "ranks": {
     "plan": 17,
     "tuned": 5,
+    "tuned_adaptive": 5,
     "no_relations": 7,
     "no_motion": 5,
     "no_position": 12
@@ -2889,9 +3103,11 @@
    "labels": [
     "person"
    ],
+   "true_motion": 0.0012,
    "ranks": {
     "plan": 57,
     "tuned": 10,
+    "tuned_adaptive": 40,
     "no_relations": 10,
     "no_motion": 5,
     "no_position": 39
@@ -2947,9 +3163,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0102,
    "ranks": {
     "plan": 42,
     "tuned": 10,
+    "tuned_adaptive": 10,
     "no_relations": 14,
     "no_motion": 6,
     "no_position": 16
@@ -3041,9 +3259,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0546,
    "ranks": {
     "plan": 1,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -3170,9 +3390,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0936,
    "ranks": {
     "plan": 1,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -3297,9 +3519,11 @@
    "labels": [
     "person"
    ],
+   "true_motion": 0.0068,
    "ranks": {
     "plan": 37,
     "tuned": 15,
+    "tuned_adaptive": 15,
     "no_relations": 15,
     "no_motion": 6,
     "no_position": 26
@@ -3358,9 +3582,11 @@
    "labels": [
     "person"
    ],
+   "true_motion": 0.0818,
    "ranks": {
     "plan": 1,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 3
@@ -3419,9 +3645,11 @@
    "labels": [
     "person"
    ],
+   "true_motion": 0.0947,
    "ranks": {
     "plan": 33,
     "tuned": 7,
+    "tuned_adaptive": 7,
     "no_relations": 7,
     "no_motion": 8,
     "no_position": 25
@@ -3486,9 +3714,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0608,
    "ranks": {
     "plan": 1,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -3622,9 +3852,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0667,
    "ranks": {
     "plan": 13,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -3720,9 +3952,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0913,
    "ranks": {
     "plan": 1,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 2
@@ -3860,9 +4094,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0191,
    "ranks": {
     "plan": 82,
     "tuned": 21,
+    "tuned_adaptive": 21,
     "no_relations": 3,
     "no_motion": 21,
     "no_position": 16
@@ -3958,9 +4194,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0389,
    "ranks": {
     "plan": 30,
     "tuned": 20,
+    "tuned_adaptive": 20,
     "no_relations": 25,
     "no_motion": 8,
     "no_position": 23
@@ -4081,9 +4319,11 @@
    "labels": [
     "person"
    ],
+   "true_motion": 0.0037,
    "ranks": {
     "plan": 90,
     "tuned": 13,
+    "tuned_adaptive": 13,
     "no_relations": 13,
     "no_motion": 12,
     "no_position": 38
@@ -4134,9 +4374,11 @@
    "labels": [
     "person"
    ],
+   "true_motion": 0.0099,
    "ranks": {
     "plan": 2,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 5,
     "no_position": 4
@@ -4191,9 +4433,11 @@
    "labels": [
     "person"
    ],
+   "true_motion": 0.0121,
    "ranks": {
     "plan": 74,
     "tuned": 6,
+    "tuned_adaptive": 6,
     "no_relations": 6,
     "no_motion": 5,
     "no_position": 28
@@ -4253,9 +4497,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.025,
    "ranks": {
     "plan": 1,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -4353,9 +4599,11 @@
    "labels": [
     "person"
    ],
+   "true_motion": 0.0328,
    "ranks": {
     "plan": 2,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -4418,9 +4666,11 @@
    "labels": [
     "person"
    ],
+   "true_motion": 0.0099,
    "ranks": {
     "plan": 84,
     "tuned": 5,
+    "tuned_adaptive": 5,
     "no_relations": 5,
     "no_motion": 5,
     "no_position": 6
@@ -4485,9 +4735,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0362,
    "ranks": {
     "plan": 2,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -4610,9 +4862,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0479,
    "ranks": {
     "plan": 5,
     "tuned": 2,
+    "tuned_adaptive": 2,
     "no_relations": 2,
     "no_motion": 1,
     "no_position": 2
@@ -4733,9 +4987,11 @@
    "labels": [
     "person"
    ],
+   "true_motion": 0.024,
    "ranks": {
     "plan": 18,
     "tuned": 10,
+    "tuned_adaptive": 10,
     "no_relations": 10,
     "no_motion": 21,
     "no_position": 1
@@ -4796,9 +5052,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0131,
    "ranks": {
     "plan": 1,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -4925,9 +5183,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0128,
    "ranks": {
     "plan": 4,
     "tuned": 2,
+    "tuned_adaptive": 2,
     "no_relations": 2,
     "no_motion": 2,
     "no_position": 2
@@ -5053,9 +5313,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0326,
    "ranks": {
     "plan": 38,
     "tuned": 6,
+    "tuned_adaptive": 6,
     "no_relations": 5,
     "no_motion": 3,
     "no_position": 5
@@ -5154,9 +5416,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0123,
    "ranks": {
     "plan": 16,
     "tuned": 4,
+    "tuned_adaptive": 4,
     "no_relations": 4,
     "no_motion": 7,
     "no_position": 4
@@ -5254,9 +5518,11 @@
    "labels": [
     "person"
    ],
+   "true_motion": 0.0323,
    "ranks": {
     "plan": 1,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -5311,9 +5577,11 @@
    "labels": [
     "person"
    ],
+   "true_motion": 0.0034,
    "ranks": {
     "plan": 32,
     "tuned": 5,
+    "tuned_adaptive": 18,
     "no_relations": 5,
     "no_motion": 4,
     "no_position": 12
@@ -5370,9 +5638,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.104,
    "ranks": {
     "plan": 1,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -5498,9 +5768,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0227,
    "ranks": {
     "plan": 19,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 3
@@ -5587,9 +5859,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0701,
    "ranks": {
     "plan": 1,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -5684,9 +5958,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0552,
    "ranks": {
     "plan": 1,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -5784,9 +6060,11 @@
    "labels": [
     "person"
    ],
+   "true_motion": 0.0782,
    "ranks": {
     "plan": 30,
     "tuned": 2,
+    "tuned_adaptive": 2,
     "no_relations": 2,
     "no_motion": 2,
     "no_position": 6
@@ -5845,9 +6123,11 @@
    "labels": [
     "person"
    ],
+   "true_motion": 0.0231,
    "ranks": {
     "plan": 2,
     "tuned": 2,
+    "tuned_adaptive": 2,
     "no_relations": 2,
     "no_motion": 6,
     "no_position": 2
@@ -5911,9 +6191,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0412,
    "ranks": {
     "plan": 3,
     "tuned": 2,
+    "tuned_adaptive": 2,
     "no_relations": 1,
     "no_motion": 2,
     "no_position": 1
@@ -6000,9 +6282,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0263,
    "ranks": {
     "plan": 3,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 2,
     "no_motion": 1,
     "no_position": 2
@@ -6106,9 +6390,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0757,
    "ranks": {
     "plan": 1,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -6229,9 +6515,11 @@
    "labels": [
     "person"
    ],
+   "true_motion": 0.0009,
    "ranks": {
     "plan": 10,
     "tuned": 3,
+    "tuned_adaptive": 3,
     "no_relations": 3,
     "no_motion": 1,
     "no_position": 1
@@ -6286,9 +6574,11 @@
    "labels": [
     "person"
    ],
+   "true_motion": 0.0002,
    "ranks": {
     "plan": 50,
     "tuned": 34,
+    "tuned_adaptive": 34,
     "no_relations": 34,
     "no_motion": 26,
     "no_position": 53
@@ -6348,9 +6638,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0004,
    "ranks": {
     "plan": 11,
     "tuned": 2,
+    "tuned_adaptive": 2,
     "no_relations": 2,
     "no_motion": 1,
     "no_position": 1
@@ -6449,9 +6741,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0214,
    "ranks": {
     "plan": 16,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 2,
     "no_motion": 1,
     "no_position": 1
@@ -6546,9 +6840,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.006,
    "ranks": {
     "plan": 2,
     "tuned": 7,
+    "tuned_adaptive": 7,
     "no_relations": 7,
     "no_motion": 7,
     "no_position": 5
@@ -6640,9 +6936,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0348,
    "ranks": {
     "plan": 1,
     "tuned": 4,
+    "tuned_adaptive": 4,
     "no_relations": 1,
     "no_motion": 2,
     "no_position": 3
@@ -6768,9 +7066,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0874,
    "ranks": {
     "plan": 1,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -6870,9 +7170,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0326,
    "ranks": {
     "plan": 1,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -7006,9 +7308,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0679,
    "ranks": {
     "plan": 1,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 2,
     "no_position": 2
@@ -7104,9 +7408,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0399,
    "ranks": {
     "plan": 1,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 2
@@ -7232,9 +7538,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0744,
    "ranks": {
     "plan": 2,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -7337,9 +7645,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.1099,
    "ranks": {
     "plan": 1,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -7431,9 +7741,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0373,
    "ranks": {
     "plan": 3,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -7562,9 +7874,11 @@
    "labels": [
     "person"
    ],
+   "true_motion": 0.037,
    "ranks": {
     "plan": 12,
     "tuned": 8,
+    "tuned_adaptive": 8,
     "no_relations": 8,
     "no_motion": 16,
     "no_position": 9
@@ -7628,9 +7942,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.01,
    "ranks": {
     "plan": 7,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -7725,9 +8041,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.1134,
    "ranks": {
     "plan": 1,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -7821,9 +8139,11 @@
    "labels": [
     "person"
    ],
+   "true_motion": 0.0631,
    "ranks": {
     "plan": 7,
     "tuned": 7,
+    "tuned_adaptive": 7,
     "no_relations": 7,
     "no_motion": 7,
     "no_position": 14
@@ -7878,9 +8198,11 @@
    "labels": [
     "person"
    ],
+   "true_motion": 0.0352,
    "ranks": {
     "plan": 3,
     "tuned": 2,
+    "tuned_adaptive": 2,
     "no_relations": 2,
     "no_motion": 2,
     "no_position": 2
@@ -7939,9 +8261,11 @@
    "labels": [
     "person"
    ],
+   "true_motion": 0.0188,
    "ranks": {
     "plan": 7,
     "tuned": 11,
+    "tuned_adaptive": 11,
     "no_relations": 11,
     "no_motion": 8,
     "no_position": 12
@@ -8006,9 +8330,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.1817,
    "ranks": {
     "plan": 1,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -8125,9 +8451,11 @@
    "labels": [
     "person"
    ],
+   "true_motion": 0.0518,
    "ranks": {
     "plan": 1,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -8190,9 +8518,11 @@
    "labels": [
     "person"
    ],
+   "true_motion": 0.0881,
    "ranks": {
     "plan": 1,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -8247,9 +8577,11 @@
    "labels": [
     "person"
    ],
+   "true_motion": 0.1505,
    "ranks": {
     "plan": 7,
     "tuned": 7,
+    "tuned_adaptive": 5,
     "no_relations": 7,
     "no_motion": 7,
     "no_position": 1
@@ -8313,9 +8645,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0971,
    "ranks": {
     "plan": 1,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -8411,9 +8745,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0437,
    "ranks": {
     "plan": 1,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -8538,9 +8874,11 @@
    "labels": [
     "person"
    ],
+   "true_motion": 0.0588,
    "ranks": {
     "plan": 1,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -8596,9 +8934,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0851,
    "ranks": {
     "plan": 1,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -8689,9 +9029,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0492,
    "ranks": {
     "plan": 1,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -8789,9 +9131,11 @@
    "labels": [
     "person"
    ],
+   "true_motion": 0.1079,
    "ranks": {
     "plan": 2,
     "tuned": 2,
+    "tuned_adaptive": 2,
     "no_relations": 2,
     "no_motion": 2,
     "no_position": 2
@@ -8848,9 +9192,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0373,
    "ranks": {
     "plan": 7,
     "tuned": 3,
+    "tuned_adaptive": 3,
     "no_relations": 3,
     "no_motion": 4,
     "no_position": 2
@@ -8984,9 +9330,11 @@
     "transporter",
     "person"
    ],
+   "true_motion": 0.0267,
    "ranks": {
     "plan": 1,
     "tuned": 2,
+    "tuned_adaptive": 2,
     "no_relations": 2,
     "no_motion": 2,
     "no_position": 2
@@ -9078,9 +9426,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0137,
    "ranks": {
     "plan": 2,
     "tuned": 3,
+    "tuned_adaptive": 3,
     "no_relations": 4,
     "no_motion": 3,
     "no_position": 4
@@ -9213,9 +9563,11 @@
    "labels": [
     "transporter"
    ],
+   "true_motion": 0.0034,
    "ranks": {
     "plan": 4,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 3
@@ -9267,9 +9619,11 @@
     "transporter",
     "person"
    ],
+   "true_motion": 0.0238,
    "ranks": {
     "plan": 1,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -9365,9 +9719,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0499,
    "ranks": {
     "plan": 1,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -9504,9 +9860,11 @@
    "labels": [
     "robot"
    ],
+   "true_motion": 0.0077,
    "ranks": {
     "plan": 4,
     "tuned": 2,
+    "tuned_adaptive": 2,
     "no_relations": 2,
     "no_motion": 2,
     "no_position": 2
@@ -9569,9 +9927,11 @@
    "labels": [
     "robot"
    ],
+   "true_motion": 0.0144,
    "ranks": {
     "plan": 6,
     "tuned": 5,
+    "tuned_adaptive": 5,
     "no_relations": 5,
     "no_motion": 5,
     "no_position": 5
@@ -9627,9 +9987,11 @@
     "robot",
     "person"
    ],
+   "true_motion": 0.0155,
    "ranks": {
     "plan": 2,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -9724,9 +10086,11 @@
     "robot",
     "person"
    ],
+   "true_motion": 0.0891,
    "ranks": {
     "plan": 1,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -9814,9 +10178,11 @@
     "person",
     "person"
    ],
+   "true_motion": 0.0668,
    "ranks": {
     "plan": 1,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
@@ -9949,9 +10315,11 @@
    "labels": [
     "robot"
    ],
+   "true_motion": 0.0083,
    "ranks": {
     "plan": 9,
     "tuned": 11,
+    "tuned_adaptive": 11,
     "no_relations": 11,
     "no_motion": 12,
     "no_position": 14
@@ -10014,9 +10382,11 @@
    "labels": [
     "robot"
    ],
+   "true_motion": 0.0169,
    "ranks": {
     "plan": 4,
     "tuned": 2,
+    "tuned_adaptive": 2,
     "no_relations": 2,
     "no_motion": 2,
     "no_position": 4
@@ -10076,9 +10446,11 @@
     "robot",
     "person"
    ],
+   "true_motion": 0.1221,
    "ranks": {
     "plan": 1,
     "tuned": 1,
+    "tuned_adaptive": 1,
     "no_relations": 1,
     "no_motion": 1,
     "no_position": 1
