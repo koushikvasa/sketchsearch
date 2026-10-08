@@ -128,3 +128,49 @@ def test_explanation_describes_the_real_tracks():
     text = explain(sketch, result, seg)
     assert text == ("Person on the left walks right toward the forklift; forklift on the right stays put; "
                     "no person in the marked zone; size is the weakest match (0.45).")
+
+
+def test_verify_segment_retries_transient_file_errors(tmp_path, monkeypatch):
+    """Seen on Windows: antivirus briefly denies access to a clip (PermissionError on a filter-driver pipe)."""
+    import app.verify as verify
+
+    monkeypatch.setattr(verify, "VERIFY_CACHE_DIR", tmp_path)
+    monkeypatch.setattr(verify.time, "sleep", lambda s: None)
+    blocked = PermissionError(13, "Permission denied", r"\.\nllMonFltProxy\622cc7b61cc8bb62")
+
+    class Flaky:
+        def __init__(self, failures):
+            self.failures = failures
+
+        def ask(self, segment_id, question):
+            if self.failures:
+                self.failures -= 1
+                raise blocked
+            return '{"verdict": "YES", "reason": "Fine."}'
+
+    monkeypatch.setattr(verify, "get_source", lambda: Flaky(2))
+    out = verify.verify_segment("seg_a", "Q?")
+    assert out["verdict"] == "YES" and list(tmp_path.glob("seg_a__*"))  # recovered and cached
+
+    monkeypatch.setattr(verify, "get_source", lambda: Flaky(99))
+    out = verify.verify_segment("seg_b", "Q?")
+    assert out["verdict"] == "UNSURE" and "blocked" in out["reason"] and "Run the check again" in out["reason"]
+    assert not list(tmp_path.glob("seg_b__*"))  # failures are never cached
+
+
+def test_blocked_cache_write_keeps_the_verdict(tmp_path, monkeypatch):
+    import app.verify as verify
+
+    monkeypatch.setattr(verify, "VERIFY_CACHE_DIR", tmp_path)
+
+    class Source:
+        def ask(self, segment_id, question):
+            return '{"verdict": "NO", "reason": "Nobody there."}'
+
+    monkeypatch.setattr(verify, "get_source", lambda: Source())
+    def denied(self, *args, **kwargs):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(type(tmp_path), "write_text", denied)
+    out = verify.verify_segment("seg_c", "Q?")
+    assert out["verdict"] == "NO" and not out["cached"]

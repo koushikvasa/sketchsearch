@@ -110,26 +110,48 @@ def is_cached(segment_id: str, question: str) -> bool:
     return _cache_path(segment_id, question).exists()
 
 
+OS_RETRIES = 2  # transient local file errors, e.g. antivirus briefly locking a clip
+
+
+def _read_cache(path):
+    try:
+        return json.loads(path.read_text()) if path.exists() else None
+    except (OSError, ValueError):  # locked or half-written: just verify again
+        return None
+
+
 @weave.op(name="verify_segment")
 def verify_segment(segment_id: str, question: str) -> dict:
     path = _cache_path(segment_id, question)
-    if path.exists():
-        return {**json.loads(path.read_text()), "cached": True}
+    if (hit := _read_cache(path)) is not None:
+        return {**hit, "cached": True}
     t = time.perf_counter()
     source = get_source()
-    try:
-        out = parse_verdict(source.ask(segment_id, question))
-        cacheable = True
-    except VisionTimeout:
-        out = {"verdict": "UNSURE", "reason": f"The video model did not answer within {VERIFY_TIMEOUT_S:g} s."}
-        cacheable = False
-    except Exception as e:  # rate limits after all retries, network, ...
-        out = {"verdict": "UNSURE", "reason": f"Verification failed: {type(e).__name__}: {str(e)[:160]}"}
-        cacheable = False
+    cacheable = False
+    for attempt in range(OS_RETRIES + 1):
+        try:
+            out = parse_verdict(source.ask(segment_id, question))
+            cacheable = True
+        except VisionTimeout:  # a TimeoutError (an OSError), so it must come first: no retry
+            out = {"verdict": "UNSURE", "reason": f"The video model did not answer within {VERIFY_TIMEOUT_S:g} s."}
+        except OSError as e:
+            # Seen on Windows: Norton's file monitor (\\.\nllMonFltProxy\...) briefly denying access to a clip
+            # the browser is streaming at the same time. It clears within a moment, so try again.
+            if attempt < OS_RETRIES:
+                time.sleep(0.5 * (attempt + 1))
+                continue
+            out = {"verdict": "UNSURE", "reason": f"A local file or network access was blocked ({type(e).__name__}: "
+                                                  f"{str(e)[:120]}). Run the check again."}
+        except Exception as e:  # rate limits after all retries, API errors, ...
+            out = {"verdict": "UNSURE", "reason": f"Verification failed: {type(e).__name__}: {str(e)[:160]}"}
+        break
     out.update(segment_id=segment_id, elapsed_s=round(time.perf_counter() - t, 1))
     if cacheable:
-        VERIFY_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps({**out, "question": question}))
+        try:
+            VERIFY_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps({**out, "question": question}))
+        except OSError:  # a blocked cache write must not cost us the verdict
+            pass
     return {**out, "cached": False}
 
 
