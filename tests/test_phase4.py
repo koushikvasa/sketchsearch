@@ -174,3 +174,25 @@ def test_blocked_cache_write_keeps_the_verdict(tmp_path, monkeypatch):
     monkeypatch.setattr(type(tmp_path), "write_text", denied)
     out = verify.verify_segment("seg_c", "Q?")
     assert out["verdict"] == "NO" and not out["cached"]
+
+
+def test_tracing_init_retries_blocked_file_access(monkeypatch):
+    import time as _time
+
+    import weave
+
+    import app.tracing as tracing
+
+    calls = []
+
+    def flaky_init(project):
+        calls.append(project)
+        if len(calls) < 3:
+            raise PermissionError(13, "Permission denied", r"\.\nllMonFltProxy\622cc7b61cc8bb62")
+
+    monkeypatch.setenv("WANDB_API_KEY", "x")
+    monkeypatch.delenv("WEAVE_DISABLED", raising=False)
+    monkeypatch.setattr(tracing, "_ready", False)
+    monkeypatch.setattr(weave, "init", flaky_init)
+    monkeypatch.setattr(_time, "sleep", lambda s: None)
+    assert tracing.init_tracing() is True and len(calls) == 3

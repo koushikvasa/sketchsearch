@@ -16,13 +16,25 @@ def init_tracing() -> bool:
         return True
     if not os.getenv("WANDB_API_KEY") or os.getenv("WEAVE_DISABLED", "").lower() in ("1", "true", "yes"):
         return False
-    try:
-        import weave
+    import time
 
-        weave.init(WEAVE_PROJECT)
-        _ready = True
-    except Exception as e:  # tracing must never take the app down
-        log.warning("Weave tracing disabled: %s", e)
+    import weave
+
+    for attempt in range(3):
+        try:
+            weave.init(WEAVE_PROJECT)
+            _ready = True
+            break
+        except OSError as e:
+            # Seen on Windows: antivirus (Norton's \\.\nllMonFltProxy\...) briefly denying a file open.
+            if attempt < 2:
+                log.info("Weave init blocked (%s); retrying", e)
+                time.sleep(1.0 * (attempt + 1))
+                continue
+            log.warning("Weave tracing disabled: %s", e)
+        except Exception as e:  # tracing must never take the app down
+            log.warning("Weave tracing disabled: %s", e)
+            break
     return _ready
 
 
