@@ -14,7 +14,8 @@ from collections import Counter
 
 from app.agent.runner import PRESET_GOAL, agent_run
 from app.demo import has_recording, save_recording
-from app.presets import PRESETS
+from app.presets import load_presets
+from app.sources import get_source
 from app.search import run_search
 from app.tracing import init_tracing
 from app.verify import verify_stream
@@ -22,8 +23,11 @@ from app.verify import verify_stream
 VERIFY_N = 10
 
 
-async def warm_presets() -> None:
-    for key, preset in PRESETS.items():
+async def warm_presets(presets: dict | None = None) -> None:
+    """AI-check the top 10 of every example chip (the current index's presets by default)."""
+    if presets is None:
+        presets = load_presets(getattr(get_source(), "index_source", "default"))
+    for key, preset in presets.items():
         t = time.perf_counter()
         results = run_search(preset["sketch"], top_n=12)["results"][:VERIFY_N]
         counts, fresh = Counter(), 0

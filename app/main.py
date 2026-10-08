@@ -15,7 +15,7 @@ from app.config import (
     SOURCE, TEXT_PREFILTER, VERIFY_CONCURRENCY, VERIFY_TIMEOUT_S, VIDEOS_DIR,
 )
 from app.models import Segment, Sketch
-from app.presets import PRESETS
+from app.presets import load_presets
 from app.search import get_matcher, run_search
 from app.sketches import sketch_from_segment
 from app.sketch_json import SketchParseError
@@ -163,7 +163,8 @@ def cameras():
 
 @app.get("/api/presets")
 def presets():
-    return [{"id": key, **p} for key, p in PRESETS.items()]
+    source = get_source()
+    return [{"id": key, **p} for key, p in load_presets(getattr(source, "index_source", "default")).items()]
 
 
 @app.post("/api/search")

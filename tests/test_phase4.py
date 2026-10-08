@@ -196,3 +196,13 @@ def test_tracing_init_retries_blocked_file_access(monkeypatch):
     monkeypatch.setattr(weave, "init", flaky_init)
     monkeypatch.setattr(_time, "sleep", lambda s: None)
     assert tracing.init_tracing() is True and len(calls) == 3
+
+
+def test_question_does_not_invent_stillness():
+    """A box without an arrow means 'any motion' to the matcher, so the AI question must not say 'in place'."""
+    from app.verify import build_question
+
+    q = build_question(PRESETS["group"]["sketch"])
+    assert "staying roughly in place" not in q and "close together, as a group" in q
+    q = build_question(PRESETS["forklift_alone"]["sketch"])  # forklift drawn with an End box on the same spot
+    assert "a forklift in the top-centre of the frame, staying roughly in place" in q

@@ -69,8 +69,17 @@ curl -s localhost:8000/api/health        # source, segments/tracks loaded, LLM +
 ```
 - Draw the "Person approaches forklift" preset, Search, then **AI check top 10**. Cosmos verdicts should stream in.
 - Run the agent preset once.
-- Run `uv run python -m scripts.warm_demo` to pre-cache the demo. It reads the same `SOURCE`. Cache keys
-  include the question and the model, so the verdicts are new for Cosmos.
+- **After connecting their data, run `make_presets.py`** so the landing page's example chips fit *their* footage:
+  ```bash
+  SOURCE=vast uv run --extra vast python -m scripts.make_presets
+  ```
+  It scans every window of the index for four kinds of real moment (something walking toward something
+  else, two meeting, an object with nobody near it, a group), uses only labels that exist in the index,
+  keeps a candidate only if its search returns at least 5 Good matches (score >= 0.70), writes
+  `data/presets_vast.json` (the UI picks it up on reload) and warms the AI-check cache for the top 10 of each.
+  `--no-warm` skips the AI checks; delete the file to fall back to the built-in examples.
+- Run `uv run python -m scripts.warm_demo` to pre-cache the demo (presets + the recorded agent run). It reads
+  the same `SOURCE`. Cache keys include the question and the model, so the verdicts are new for Cosmos.
 
 **50-60 min: deploy** (next section). Smoke-test `https://<app host>/app` and `/app/health`.
 

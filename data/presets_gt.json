@@ -1,0 +1,341 @@
+{
+ "index": "gt",
+ "generated_at": "2026-10-08T14:59:37+00:00",
+ "generator": "scripts/make_presets.py",
+ "presets": [
+  {
+   "id": "approach",
+   "kind": "approach",
+   "chip": "Worker walks toward robot",
+   "title": "Worker walks toward robot",
+   "description": "Worker walks toward robot (near the camera), found in warehouse_cam3 at 22 s",
+   "camera_id": "warehouse_cam3",
+   "sketch": {
+    "objects": [
+     {
+      "id": "person",
+      "label": "person",
+      "start_box": {
+       "x": 0.0115,
+       "y": 0.8528,
+       "w": 0.0594,
+       "h": 0.1463
+      },
+      "end_box": {
+       "x": 0.2078,
+       "y": 0.7157,
+       "w": 0.0729,
+       "h": 0.2454
+      },
+      "path": [
+       [
+        0.0412,
+        0.926
+       ],
+       [
+        0.1079,
+        0.9042
+       ],
+       [
+        0.1789,
+        0.882
+       ],
+       [
+        0.193,
+        0.8658
+       ],
+       [
+        0.2443,
+        0.8384
+       ]
+      ],
+      "absent": false
+     },
+     {
+      "id": "robot2",
+      "label": "robot",
+      "start_box": {
+       "x": 0.5714,
+       "y": 0.2093,
+       "w": 0.0208,
+       "h": 0.038
+      },
+      "end_box": {
+       "x": 0.5693,
+       "y": 0.1944,
+       "w": 0.0214,
+       "h": 0.037
+      },
+      "path": [
+       [
+        0.5818,
+        0.2283
+       ],
+       [
+        0.58,
+        0.2255
+       ],
+       [
+        0.5794,
+        0.2171
+       ],
+       [
+        0.5794,
+        0.2157
+       ],
+       [
+        0.58,
+        0.2129
+       ]
+      ],
+      "absent": false
+     }
+    ]
+   },
+   "validated": {
+    "good_matches": 12,
+    "top_score": 1.0,
+    "source_segment": "warehouse_cam3_20",
+    "window": [
+     1.5,
+     3.0
+    ]
+   }
+  },
+  {
+   "id": "meet",
+   "kind": "meet",
+   "chip": "Two people meet in an aisle",
+   "title": "Two people meet in an aisle",
+   "description": "Two people meet in an aisle (near the camera), found in warehouse_cam3 at 170 s",
+   "camera_id": "warehouse_cam3",
+   "sketch": {
+    "objects": [
+     {
+      "id": "person1",
+      "label": "person",
+      "start_box": {
+       "x": 0.351,
+       "y": 0.6176,
+       "w": 0.049,
+       "h": 0.2519
+      },
+      "end_box": {
+       "x": 0.2568,
+       "y": 0.6583,
+       "w": 0.0443,
+       "h": 0.2667
+      },
+      "path": [
+       [
+        0.3755,
+        0.7436
+       ],
+       [
+        0.3474,
+        0.762
+       ],
+       [
+        0.3198,
+        0.7649
+       ],
+       [
+        0.3053,
+        0.7778
+       ],
+       [
+        0.2789,
+        0.7916
+       ]
+      ],
+      "absent": false
+     },
+     {
+      "id": "person2",
+      "label": "person",
+      "start_box": {
+       "x": 0.0,
+       "y": 0.888,
+       "w": 0.05,
+       "h": 0.1111
+      },
+      "end_box": {
+       "x": 0.1943,
+       "y": 0.7361,
+       "w": 0.0682,
+       "h": 0.2398
+      },
+      "path": [
+       [
+        0.025,
+        0.9435
+       ],
+       [
+        0.0927,
+        0.9167
+       ],
+       [
+        0.1456,
+        0.9051
+       ],
+       [
+        0.1638,
+        0.8875
+       ],
+       [
+        0.2284,
+        0.856
+       ]
+      ],
+      "absent": false
+     }
+    ]
+   },
+   "validated": {
+    "good_matches": 12,
+    "top_score": 1.0,
+    "source_segment": "warehouse_cam3_168",
+    "window": [
+     2.5,
+     4.0
+    ]
+   }
+  },
+  {
+   "id": "absent",
+   "kind": "absent",
+   "chip": "Person alone, nobody nearby",
+   "title": "Person alone, nobody nearby",
+   "description": "Person alone, nobody nearby (near the camera), found in warehouse_cam3 at 212 s",
+   "camera_id": "warehouse_cam3",
+   "sketch": {
+    "objects": [
+     {
+      "id": "person",
+      "label": "person",
+      "start_box": {
+       "x": 0.0,
+       "y": 0.7676,
+       "w": 0.1021,
+       "h": 0.2315
+      },
+      "end_box": {
+       "x": 0.1568,
+       "y": 0.7685,
+       "w": 0.0708,
+       "h": 0.2306
+      },
+      "path": [
+       [
+        0.051,
+        0.8833
+       ],
+       [
+        0.0768,
+        0.8824
+       ],
+       [
+        0.1272,
+        0.8903
+       ],
+       [
+        0.1646,
+        0.888
+       ],
+       [
+        0.1922,
+        0.8838
+       ]
+      ],
+      "absent": false
+     },
+     {
+      "id": "nobody",
+      "label": "person",
+      "start_box": {
+       "x": 0.0,
+       "y": 0.7333,
+       "w": 0.201,
+       "h": 0.2667
+      },
+      "absent": true
+     }
+    ]
+   },
+   "validated": {
+    "good_matches": 16,
+    "top_score": 1.0,
+    "source_segment": "warehouse_cam3_212",
+    "window": [
+     0.5,
+     2.0
+    ]
+   }
+  },
+  {
+   "id": "group",
+   "kind": "group",
+   "chip": "Group of 4 people",
+   "title": "Group of 4 people",
+   "description": "Group of 4 people (at the far end), found in warehouse_cam2 at 194 s",
+   "camera_id": "warehouse_cam2",
+   "sketch": {
+    "objects": [
+     {
+      "id": "person1",
+      "label": "person",
+      "start_box": {
+       "x": 0.4396,
+       "y": 0.0,
+       "w": 0.0161,
+       "h": 0.0769
+      },
+      "absent": false
+     },
+     {
+      "id": "person2",
+      "label": "person",
+      "start_box": {
+       "x": 0.4349,
+       "y": 0.0,
+       "w": 0.0151,
+       "h": 0.062
+      },
+      "absent": false
+     },
+     {
+      "id": "person3",
+      "label": "person",
+      "start_box": {
+       "x": 0.413,
+       "y": 0.0,
+       "w": 0.0146,
+       "h": 0.0611
+      },
+      "absent": false
+     },
+     {
+      "id": "person4",
+      "label": "person",
+      "start_box": {
+       "x": 0.4125,
+       "y": 0.0,
+       "w": 0.0151,
+       "h": 0.0565
+      },
+      "absent": false
+     }
+    ]
+   },
+   "validated": {
+    "good_matches": 43,
+    "top_score": 1.0,
+    "source_segment": "warehouse_cam2_192",
+    "window": [
+     2.0,
+     3.5
+    ]
+   }
+  }
+ ]
+}

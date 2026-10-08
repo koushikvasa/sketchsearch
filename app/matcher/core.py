@@ -196,6 +196,13 @@ class Matcher:
         cs = np.concatenate([np.zeros(per_row.shape[:-1] + (1,)), np.cumsum(per_row, axis=-1)], axis=-1)
         return cs[..., self.win_r1] - cs[..., self.win_r0]
 
+    def scope_counts(self, sketch: Sketch, segment_ids=None, camera_ids=None) -> tuple[int, int]:
+        """(segments in the search scope, segments that also contain every drawn object)."""
+        camera_ids = camera_ids if camera_ids is not None else sketch.camera_ids
+        in_scope = self._allowed([], segment_ids, camera_ids)
+        present = [o for o in sketch.objects if not o.absent]
+        return int(in_scope.sum()), int(self._allowed(present, segment_ids, camera_ids).sum())
+
     def _allowed(self, present, segment_ids, camera_ids) -> np.ndarray:
         allowed = np.ones(len(self.segments), dtype=bool)
         if segment_ids is not None:

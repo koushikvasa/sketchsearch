@@ -31,6 +31,9 @@ def build_question(sketch: Sketch, window: list[float] | None = None) -> str:
     who = names(present)
     starts = {o.id: center(o.start_box) for o in present}
     ends = {}
+    # Only describe motion the user drew: a box without an arrow or End box means "any motion",
+    # and the matcher treats it that way, so the question must not claim it stays in place.
+    drawn = {o.id: o.end_box is not None or bool(o.path and len(o.path) >= 2) for o in present}
     for o in present:
         if o.end_box is not None:
             ends[o.id] = center(o.end_box)
@@ -46,7 +49,9 @@ def build_question(sketch: Sketch, window: list[float] | None = None) -> str:
         s, e = starts[o.id], ends[o.id]
         move = direction((e[0] - s[0], e[1] - s[1]))
         text = f"{label} in the {region(s)} of the frame"
-        if move is None:
+        if not drawn[o.id]:
+            pass  # motion not specified
+        elif move is None:
             text += ", staying roughly in place"
         else:
             text += f", moving {move}"
@@ -58,11 +63,15 @@ def build_question(sketch: Sketch, window: list[float] | None = None) -> str:
                         break
         lines.append(text)
 
-    if len(present) == 2 and all(direction((ends[o.id][0] - starts[o.id][0], ends[o.id][1] - starts[o.id][1])) is None
-                                 for o in present):
+    still = all(direction((ends[o.id][0] - starts[o.id][0], ends[o.id][1] - starts[o.id][1])) is None for o in present)
+    if len(present) == 2 and still:
         a, b = present
         d = dist(starts[a.id], starts[b.id])
         lines.append(f"{who[a.id]} and {who[b.id]} are {'close to each other' if d < 0.15 else 'apart'}")
+    elif len(present) >= 3 and still:
+        spread = max(dist(starts[a.id], starts[b.id]) for a in present for b in present)
+        if spread < 0.2:
+            lines.append(f"these {len(present)} are close together, as a group")
 
     for z in (o for o in sketch.objects if o.absent):
         noun = NOUNS.get(z.label, z.label)

@@ -94,3 +94,28 @@ def test_converging_vs_diverging_rank_different_real_segments(source, matcher):
     assert top_c["segment_id"] != top_d["segment_id"]
     assert _pair_distance_change(source, top_c) < 0  # the matched people really get closer
     assert _pair_distance_change(source, top_d) > 0  # ... and really move apart
+
+
+def test_search_reports_counts_and_how_often(source):
+    from app.presets import PRESETS
+    from app.search import run_search
+
+    res = run_search(PRESETS["forklift_approach"]["sketch"], top_n=12)
+    c = res["counts"]
+    assert c["searched"] == 308 and c["candidates"] == 16  # only cam1 segments have a forklift and a person
+    assert c["great"] + c["good"] == res["how_often"]["total"] <= c["matches"]
+    per_cam = {x["name"]: x["great"] + x["good"] for x in res["how_often"]["per_camera"]}
+    assert per_cam["Camera 1"] == res["how_often"]["total"] and per_cam["Camera 0"] == 0
+    assert res["how_often"]["insight"].startswith("Most matches on Camera 1, between minutes")
+    assert sum(m["great"] + m["good"] for m in res["how_often"]["per_minute"]) == res["how_often"]["total"]
+
+
+def test_insight_wording():
+    from app.search import insight
+
+    cams = [{"name": "Camera 0", "great": 1, "good": 1}, {"name": "Camera 1", "great": 1, "good": 1}]
+    mins = [{"minute": m, "great": n, "good": 0} for m, n in enumerate([0, 0, 3, 1, 0])]
+    assert insight(cams, mins) == "Most matches on Camera 0, between minutes 2 and 4."
+    cams3 = cams + [{"name": "Camera 2", "great": 1, "good": 1}]
+    assert insight(cams3, mins).startswith("Spread across cameras")
+    assert insight([{"name": "Camera 0", "great": 0, "good": 0}], mins).startswith("No great or good matches")

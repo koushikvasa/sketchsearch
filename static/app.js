@@ -574,6 +574,7 @@ function toSketch() {
 // ---------------------------------------------------------------------------
 let searchSeq = 0;
 let lastSketch = null;
+let lastResponse = null;
 let verifyAbort = null;
 let cards = [];
 let animating = false;
@@ -625,8 +626,12 @@ function renderResults(res, sketch) {
   stopAllVideos();
   const box = $("#results");
   box.innerHTML = `<div class="featured" id="featured"></div>
-    <p class="strip-head">More matches · click one to see it big</p><div class="strip" id="strip"></div>`;
-  $("#status").textContent = `${res.results.length} moments found in ${(res.elapsed_ms / 1000).toFixed(2)} s`;
+    <p class="strip-head">More matches · click one to see it big</p><div class="strip" id="strip"></div>
+    <section class="how-often" id="howOften" aria-label="How often does this happen?"></section>`;
+  const c = res.counts || {};
+  $("#status").textContent = c.searched
+    ? `Searched ${c.searched} clips · ${(c.great || 0) + (c.good || 0)} great or good matches · ${(res.elapsed_ms / 1000).toFixed(2)} s`
+    : `${res.results.length} moments found in ${(res.elapsed_ms / 1000).toFixed(2)} s`;
   const objects = sketch.objects.map((o) => ({
     ...o, start: o.start_box, end: o.end_box, path: o.path,
   }));
@@ -635,6 +640,11 @@ function renderResults(res, sketch) {
   cards[0].featured = true;
   cards.slice(1).forEach((c) => $("#strip").appendChild(c.el));
   $("#verifyBtn").disabled = false;
+  $("#reportBtn").disabled = false;
+  $("#copyLinkBtn").disabled = false;
+  lastResponse = res;
+  renderHowOften(res.how_often);
+  updateShareHash();
   state.checked = false;
   setProgress();
   for (const card of cards) {
@@ -1191,7 +1201,7 @@ function describeSketch(objects) {
     if (n >= 3 && group.length === n) {
       const cs = group.map((o) => center(o.start));
       const mid = [cs.reduce((a, c) => a + c[0], 0) / n, cs.reduce((a, c) => a + c[1], 0) / n];
-      clauses.push(`a group of ${n} ${PLURALS[lbl]} standing together ${placeWords(mid)}`);
+      clauses.push(`a group of ${n} ${PLURALS[lbl]} together ${placeWords(mid)}`);
       group.forEach((o) => used.add(o.id));
     }
   }
@@ -1199,8 +1209,9 @@ function describeSketch(objects) {
     if (used.has(o.id)) continue;
     let text = `a ${NOUNS[o.label]} ${placeWords(center(o.start))}`;
     const mv = moveWords(o);
+    const drawnMove = !!(o.end || (o.path && o.path.length >= 2));
     if (!mv) {
-      text += o.label === "person" ? ", standing still" : ", not moving";
+      if (drawnMove) text += o.label === "person" ? ", standing still" : ", not moving";
     } else {
       text += ` ${mv}`;
       for (const other of present) {
@@ -1399,6 +1410,232 @@ function initGuide() {
 
 
 // ---------------------------------------------------------------------------
+// 📊 How often does this happen?
+// ---------------------------------------------------------------------------
+// Ordinal two-step amber (Great darker-bright, Good dim), validated with the dataviz palette checker
+// against the panel surface; Good is under 3:1, so every bar carries a visible total and a table view exists.
+const LEVEL_COLORS = { great: "#c2800e", good: "#87560a" };
+
+function barChart(title, rows, labelOf) {
+  const max = Math.max(1, ...rows.map((r) => r.great + r.good));
+  const cols = rows.map((r) => {
+    const total = r.great + r.good;
+    const tip = `${labelOf(r)}: ${total} match${total === 1 ? "" : "es"} (${r.great} great, ${r.good} good)`;
+    const seg = (n, cls) => (n ? `<span class="seg ${cls}" style="height:${(n / max) * 100}%"></span>` : "");
+    return `<div class="col" tabindex="0" aria-label="${escapeHtml(tip)}" data-tip="${escapeHtml(tip)}">
+      <span class="total${total ? "" : " zero"}">${total}</span>
+      <div class="stack">${seg(r.good, "good")}${seg(r.great, "great")}</div>
+      <span class="xlab">${escapeHtml(labelOf(r))}</span></div>`;
+  }).join("");
+  const table = `<table><thead><tr><th>${escapeHtml(title)}</th><th>Great</th><th>Good</th></tr></thead><tbody>` +
+    rows.map((r) => `<tr><td>${escapeHtml(labelOf(r))}</td><td>${r.great}</td><td>${r.good}</td></tr>`).join("") +
+    "</tbody></table>";
+  return { chart: `<figure class="bar-chart"><figcaption>${escapeHtml(title)}</figcaption><div class="plot">${cols}</div></figure>`, table };
+}
+
+function renderHowOften(h) {
+  const box = $("#howOften");
+  if (!box || !h) return;
+  const cams = barChart("Per camera", h.per_camera, (r) => r.name);
+  const mins = barChart("Per minute of video", h.per_minute, (r) => `${r.minute}:00`);
+  box.innerHTML = `
+    <div class="how-head">
+      <h3>📊 How often does this happen?</h3>
+      <div class="legend"><span><i style="background:${LEVEL_COLORS.great}"></i>Great match</span>
+        <span><i style="background:${LEVEL_COLORS.good}"></i>Good match</span></div>
+    </div>
+    <p class="insight">${escapeHtml(h.insight)} <span class="muted small">(${h.total} great or good matches in all)</span></p>
+    <div class="charts">${cams.chart}${mins.chart}</div>
+    <details class="table-view"><summary>Show as table</summary><div class="tables">${cams.table}${mins.table}</div></details>`;
+}
+
+// ---------------------------------------------------------------------------
+// 🔗 Share link: the description + sketch + scope live in the URL hash
+// ---------------------------------------------------------------------------
+function b64urlEncode(text) {
+  const bytes = new TextEncoder().encode(text);
+  let bin = "";
+  bytes.forEach((b) => { bin += String.fromCharCode(b); });
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function b64urlDecode(s) {
+  const bin = atob(s.replace(/-/g, "+").replace(/_/g, "/"));
+  return new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
+}
+
+function shareState() {
+  const r = (b) => (b ? [b.x, b.y, b.w, b.h].map(round4) : undefined);
+  return {
+    v: 1,
+    t: $("#sketchText").value.trim() || undefined,
+    c: $("#scope").value || undefined,
+    o: state.objects.map((o) => ({
+      i: o.id, l: o.label, a: o.absent ? 1 : undefined, s: r(o.start), e: r(o.end),
+      p: o.path ? o.path.map(([x, y]) => [round4(x), round4(y)]) : undefined,
+    })),
+  };
+}
+
+function shareUrl() {
+  const url = new URL(window.location.href);
+  url.hash = `s=${b64urlEncode(JSON.stringify(shareState()))}`;
+  return url.toString();
+}
+
+function updateShareHash() {
+  if (!state.objects.length) return;
+  history.replaceState(null, "", shareUrl());
+}
+
+function restoreFromHash() {
+  const m = /^#s=([A-Za-z0-9_-]+)/.exec(window.location.hash);
+  if (!m) return false;
+  let data;
+  try {
+    data = JSON.parse(b64urlDecode(m[1]));
+  } catch {
+    toast("That link looks broken, so here's a fresh start.", true);
+    return false;
+  }
+  const box = (a) => (a ? { x: a[0], y: a[1], w: a[2], h: a[3] } : null);
+  enterStudio();
+  $("#sketchText").value = data.t || "";
+  if (data.c && [...$("#scope").options].some((o) => o.value === data.c)) {
+    $("#scope").value = data.c;
+    selectCamera(data.c);
+  }
+  loadSketch({
+    objects: (data.o || []).map((o) => ({
+      id: o.i, label: o.l, absent: !!o.a, start_box: box(o.s), end_box: box(o.e), path: o.p || null,
+    })),
+  });
+  toast("Opened a shared search.");
+  runSearch();
+  return true;
+}
+
+async function copyLink() {
+  const url = shareUrl();
+  history.replaceState(null, "", url);
+  try {
+    await navigator.clipboard.writeText(url);
+    toast("🔗 Link copied. Anyone who opens it sees this sketch and its results.");
+  } catch {
+    window.prompt("Copy this link:", url);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 📄 Incident report (printable page, "Save as PDF" via the browser's print)
+// ---------------------------------------------------------------------------
+function sketchImage() {
+  rendering = true;
+  canvas.discardActiveObject();
+  const bg = canvas.backgroundColor;
+  canvas.backgroundColor = "#11141a"; // the faint camera picture needs the dark ground it is drawn on
+  canvas.renderAll();
+  try {
+    return canvas.toDataURL({ format: "png", multiplier: 1 });
+  } catch {
+    return ""; // a cross-origin background would taint the canvas; the report still works without it
+  } finally {
+    canvas.backgroundColor = bg;
+    canvas.renderAll();
+    rendering = false;
+  }
+}
+
+function absUrl(u) {
+  return u ? new URL(u, document.baseURI).href : "";
+}
+
+async function openReport() {
+  if (!lastResponse || !cards.length) return toast("Run a search first, then create the report.");
+  const w = window.open("", "_blank"); // open first, inside the click, so pop-up blockers allow it
+  if (!w) return toast("Your browser blocked the report window. Allow pop-ups for this page.", true);
+  w.document.write("<p style='font-family:sans-serif;padding:2rem'>Preparing the report…</p>");
+  if (!state.health) {
+    try { state.health = await api("api/health"); } catch { /* settings just show "-" */ }
+  }
+  const res = lastResponse;
+  const verified = cards.filter((c) => c.verdict);
+  const picked = (verified.length ? verified : cards).slice(0, 6);
+  const confirmed = verified.filter((c) => c.verdict.verdict === "YES").length;
+  const health = state.health || {};
+  const settings = [
+    ["Description", $("#sketchText").value.trim() || "(drawn by hand)"],
+    ["Searched in", $("#scope").selectedOptions[0]?.textContent || "All cameras"],
+    ["Footage", health.index ? `${health.index.segments} clips of 4 s from ${health.index.cameras} cameras (${health.index.source})` : "-"],
+    ["AI checker", (health.verify?.models || [])[0] || "-"],
+    ["Mode", $("#demoMode").checked ? "Demo mode (pre-computed AI checks)" : "Live"],
+  ];
+  const clip = (c) => {
+    const r = c.result, m = matchLabel(r.score), v = c.verdict;
+    const verdict = v ? `${VERDICT_UI[v.verdict]?.text || v.verdict}: ${escapeHtml(v.reason)}` : "Not checked by AI";
+    const img = r.frame_url ? `<img src="${escapeHtml(absUrl(r.frame_url))}" alt="">` : "";
+    return `<article class="clip">${img}<div>
+      <h3>${escapeHtml(whereLabel(r))} <span class="lvl ${m.cls}">${m.text}</span></h3>
+      <p class="verdict ${v ? v.verdict.toLowerCase() : "none"}">${verdict}</p>
+      <p class="muted">${escapeHtml(r.explanation || "")}</p>
+      <p class="muted small">Clip <a href="${escapeHtml(absUrl(r.clip_url))}">${escapeHtml(r.segment_id)}</a>,
+        matched seconds ${r.window[0]}-${r.window[1]} · score ${r.score.toFixed(2)}</p></div></article>`;
+  };
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>SketchSearch incident report</title>
+<style>
+  :root { font-family: "IBM Plex Sans", "Segoe UI", sans-serif; color: #1b1d22; }
+  body { margin: 0; background: #f4f2ec; }
+  .page { max-width: 860px; margin: 24px auto; background: #fff; padding: 36px 44px; box-shadow: 0 6px 30px rgba(0,0,0,.12); }
+  header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #c2800e; padding-bottom: 12px; }
+  h1 { font-family: Archivo, "Segoe UI", sans-serif; margin: 0; font-size: 26px; }
+  h1 span { color: #b37708; } h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .1em; color: #6b6f78; margin: 26px 0 10px; }
+  .meta { text-align: right; font-size: 13px; color: #555; }
+  .sketch { display: grid; grid-template-columns: 300px 1fr; gap: 20px; align-items: center; }
+  .sketch img { width: 300px; border-radius: 6px; border: 1px solid #ddd; }
+  .caption { font-size: 18px; font-weight: 600; }
+  .counts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .count { border: 1px solid #e3ded2; border-radius: 8px; padding: 12px; } .count b { display: block; font-size: 28px; font-family: Archivo, sans-serif; }
+  .clip { display: grid; grid-template-columns: 220px 1fr; gap: 16px; padding: 12px 0; border-top: 1px solid #eee; break-inside: avoid; }
+  .clip img { width: 220px; border-radius: 6px; } .clip h3 { margin: 0 0 6px; font-size: 16px; }
+  .lvl { font-size: 12px; border-radius: 999px; padding: 2px 8px; margin-left: 6px; border: 1px solid #c2800e; color: #8a5a00; }
+  .lvl.great { background: #c2800e; color: #fff; }
+  .verdict { margin: 0 0 6px; font-weight: 600; } .verdict.yes { color: #1f7a45; } .verdict.no { color: #b23a2c; } .verdict.unsure { color: #a86b00; }
+  .muted { color: #666; margin: 0 0 4px; } .small { font-size: 12px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; } td { padding: 4px 8px; border-bottom: 1px solid #eee; } td:first-child { color: #666; width: 140px; }
+  .toolbar { max-width: 860px; margin: 16px auto 0; display: flex; gap: 10px; justify-content: flex-end; }
+  .toolbar button { font: inherit; padding: 8px 16px; border-radius: 8px; border: 1px solid #c2800e; background: #c2800e; color: #fff; cursor: pointer; }
+  .toolbar button.ghost { background: #fff; color: #8a5a00; }
+  footer { margin-top: 24px; font-size: 12px; color: #888; }
+  @media print { body { background: #fff; } .toolbar { display: none; } .page { box-shadow: none; margin: 0; max-width: none; padding: 0; } }
+</style></head><body>
+<div class="toolbar"><button class="ghost" onclick="window.close()">Close</button><button onclick="window.print()">🖨 Save as PDF</button></div>
+<div class="page">
+  <header><div><h1>Sketch<span>Search</span> incident report</h1><div class="muted">Moments matching a sketched scene, checked by a video AI</div></div>
+    <div class="meta">${escapeHtml(new Date().toLocaleString())}</div></header>
+  <h2>What we looked for</h2>
+  <div class="sketch">${(() => { const src = sketchImage(); return src ? `<img src="${src}" alt="The sketch">` : ""; })()}
+    <p class="caption">${escapeHtml(describeSketch(state.objects))}</p></div>
+  <h2>Summary</h2>
+  <div class="counts">
+    <div class="count"><b>${res.counts.searched}</b>clips searched</div>
+    <div class="count"><b>${res.counts.great + res.counts.good}</b>great or good matches</div>
+    <div class="count"><b>${verified.length ? confirmed : "-"}</b>${verified.length ? `confirmed by AI (of ${verified.length} checked)` : "confirmed by AI (not checked yet)"}</div>
+  </div>
+  <p>${escapeHtml(res.how_often?.insight || "")}</p>
+  <h2>${verified.length ? "Clips checked by AI" : "Top matches"}</h2>
+  ${picked.map(clip).join("")}
+  <h2>Settings</h2>
+  <table>${settings.map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td>${escapeHtml(v)}</td></tr>`).join("")}</table>
+  <footer>Generated by SketchSearch. Matches are geometric similarity to the sketch; AI verdicts come from a video model
+    and can be wrong. Review the clips before acting on them.</footer>
+</div></body></html>`;
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+}
+
+
+// ---------------------------------------------------------------------------
 // Boot
 // ---------------------------------------------------------------------------
 function bindControls() {
@@ -1418,6 +1655,8 @@ function bindControls() {
     if (state.objects.length && cards.length) runSearch();
   });
   $("#drawBtn").addEventListener("click", startDrawing);
+  $("#reportBtn").addEventListener("click", openReport);
+  $("#copyLinkBtn").addEventListener("click", copyLink);
   $("#homeLink").addEventListener("click", goHome);
   initMic();
   initGuide();
@@ -1462,6 +1701,8 @@ async function init() {
       b.addEventListener("click", () => runPreset(p));
       holder.appendChild(b);
     }
+    api("api/health").then((h) => { state.health = h; }).catch(() => {});
+    restoreFromHash();
   } catch (err) {
     showState("error", `Can't reach the server (${err.message}).`);
   }

@@ -1,5 +1,9 @@
 """Demo sketches: shown as preset buttons in the UI and printed by scripts/example_searches.py."""
 
+import json
+from pathlib import Path
+
+from app.config import DATA_DIR
 from app.models import Box, Sketch, SketchObject
 
 PERSON = (0.025, 0.12)
@@ -63,3 +67,17 @@ PRESETS: dict[str, dict] = {
         ]),
     },
 }
+
+
+def presets_path(index: str) -> Path:
+    return DATA_DIR / f"presets_{index}.json"
+
+
+def load_presets(index: str) -> dict[str, dict]:
+    """Example chips for an index: data/presets_<index>.json from scripts/make_presets.py, else the hand-made
+    PRESETS above (drawn for the Warehouse_022 ground-truth index)."""
+    path = presets_path(index)
+    if not path.exists():
+        return PRESETS
+    data = json.loads(path.read_text())
+    return {p["id"]: {**p, "sketch": Sketch.model_validate(p["sketch"])} for p in data["presets"]}
