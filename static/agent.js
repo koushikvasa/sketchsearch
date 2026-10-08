@@ -2,7 +2,7 @@
 // Agent tab, view switching and demo mode. Loaded after app.js and shares its helpers ($, api, COLORS, ...).
 
 const agent = { running: false, markdown: "", abort: null, bg: null, timer: null, started: 0 };
-const VERDICT_ICON = { YES: "✅", NO: "❌", UNSURE: "⚠️", SKIPPED: "⏭️" };
+const VERDICT_ICON = { YES: "check", NO: "x", UNSURE: "circle-help", SKIPPED: "skip-forward" };
 
 function demoMode() {
   return $("#demoMode").checked;
@@ -29,7 +29,7 @@ function initViews() {
   box.addEventListener("change", () => {
     try { localStorage.setItem("sketchsearch.demo", box.checked ? "1" : "0"); } catch { /* storage blocked */ }
     toast(box.checked
-      ? "🎬 Demo mode: presets auto-run the (cached) AI check and the agent replays its recorded run."
+      ? "Demo mode: examples auto-run the (cached) AI check and the agent replays its recorded run."
       : "Demo mode off: everything runs live.");
   });
 }
@@ -44,7 +44,7 @@ function drawMini(cv, sketch) {
   cv.height = h * dpr;
   const ctx = cv.getContext("2d");
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.fillStyle = "#10131a";
+  ctx.fillStyle = TOKENS.bg;
   ctx.fillRect(0, 0, w, h);
   if (agent.bg?.complete && agent.bg.naturalWidth) {
     ctx.globalAlpha = 0.35;
@@ -59,7 +59,7 @@ function drawMini(cv, sketch) {
     ctx.lineWidth = 1.5;
     if (o.absent) {
       ctx.setLineDash([4, 3]);
-      ctx.fillStyle = "rgba(255,107,107,0.15)";
+      ctx.fillStyle = hexA(ABSENT_COLOR, 0.15);
       ctx.fillRect(b.x * w, b.y * h, b.w * w, b.h * h);
     }
     ctx.strokeRect(b.x * w, b.y * h, b.w * w, b.h * h);
@@ -127,7 +127,7 @@ function renderEvent(ev) {
   switch (ev.event) {
     case "start":
       traceItem("start", `<div class="k-title">Goal: ${escapeHtml(ev.goal)}</div>
-        <div class="k-sub">Planner ${escapeHtml(ev.llm)} · up to ${ev.budget} new video-model checks${ev.replayed ? " · 🎬 replaying recorded run" : ""}</div>`);
+        <div class="k-sub">Planner ${escapeHtml(ev.llm)} · up to ${ev.budget} new video-model checks${ev.replayed ? " · replaying recorded run" : ""}</div>`);
       break;
     case "plan": {
       const li = traceItem("plan", `<div class="k-title">Plan: ${ev.sketches.length} sketches</div>
@@ -151,7 +151,7 @@ function renderEvent(ev) {
     case "verify": {
       const cls = `v-${ev.verdict.toLowerCase()}`;
       const img = thumbHtml(ev.frame_url, ev.clip_url);
-      traceItem("verify", `<div class="k-verify-row">${img}<span class="${cls}">${VERDICT_ICON[ev.verdict] || "•"} ${ev.verdict}</span>
+      traceItem("verify", `<div class="k-verify-row">${img}<span class="${cls} verdict-tag">${icon(VERDICT_ICON[ev.verdict] || "dot")}${ev.verdict}</span>
         <span><strong>${escapeHtml(segLabel(ev.segment_id))}</strong>: ${escapeHtml(ev.reason)}${ev.cached ? ' <span class="muted">(cached)</span>' : ""}</span></div>`);
       break;
     }
@@ -307,7 +307,7 @@ async function initAgent() {
   try {
     const info = await api("api/demo");
     const btn = $("#agentPreset");
-    btn.textContent = `🎯 ${info.preset_goal}`;
+    btn.innerHTML = `${icon("radar")}${escapeHtml(info.preset_goal)}`;
     btn.addEventListener("click", () => {
       $("#agentGoal").value = info.preset_goal;
       runAgent();

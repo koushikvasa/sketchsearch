@@ -4,19 +4,28 @@
 // Constants
 // ---------------------------------------------------------------------------
 const LABELS = ["person", "forklift", "robot", "transporter"];
-const COLORS = { person: "#5ec8ff", forklift: "#ff8a5c", robot: "#c39bff", transporter: "#74d99f" };
-const ABSENT_COLOR = "#ef6b5d";
+// Colours come from the CSS tokens on :root (static/style.css). Your sketch is amber (--accent), real tracks are
+// --info, empty areas are --danger. Labels are told apart by icon and tag, not colour.
+const TOKENS = (() => {
+  const css = getComputedStyle(document.documentElement);
+  const get = (name) => css.getPropertyValue(`--${name}`).trim();
+  return Object.fromEntries(["bg", "surface", "surface-2", "border", "text", "muted", "accent", "success", "danger", "info"]
+    .map((n) => [n, get(n)]));
+})();
+const COLORS = { person: TOKENS.accent, forklift: TOKENS.accent, robot: TOKENS.accent, transporter: TOKENS.accent };
+const ABSENT_COLOR = TOKENS.danger;
+const LABEL_ICONS = { person: "user", forklift: "forklift", robot: "bot", transporter: "shopping-cart" };
 const LABEL_NAMES = { person: "Person", forklift: "Forklift", robot: "Robot", transporter: "Cart" };
 const NOUNS = { person: "person", forklift: "forklift", robot: "robot", transporter: "cart" };
 const PLURALS = { person: "people", forklift: "forklifts", robot: "robots", transporter: "carts" };
 const MOVE_WARN = 0.25; // a drawn move longer than this is far more than 1.5 s of motion
 const TOOLBAR = [
-  { tool: "box", label: "person", text: "Person" },
-  { tool: "box", label: "forklift", text: "Forklift" },
-  { tool: "box", label: "robot", text: "Robot" },
-  { tool: "box", label: "transporter", text: "Cart" },
-  { tool: "path", text: "Arrow", glyph: "➜", title: "Press on a box and drag the way it moves" },
-  { tool: "absent", label: "person", text: "Empty area", glyph: "⦸", title: "Mark an area where no one may be" },
+  { tool: "box", label: "person", text: "Person", icon: "user" },
+  { tool: "box", label: "forklift", text: "Forklift", icon: "forklift" },
+  { tool: "box", label: "robot", text: "Robot", icon: "bot" },
+  { tool: "box", label: "transporter", text: "Cart", icon: "shopping-cart" },
+  { tool: "path", text: "Arrow", icon: "move-up-right", title: "Press on a box and drag the way it moves" },
+  { tool: "absent", label: "person", text: "Empty area", icon: "ban", title: "Mark an area where no one may be" },
 ];
 const DEFAULT_SIZE = { person: [0.03, 0.13], forklift: [0.05, 0.1], robot: [0.05, 0.05], transporter: [0.07, 0.04] };
 const ABSENT_SIZE = [0.25, 0.25];
@@ -44,6 +53,17 @@ const KF_HELP = {
 };
 
 const $ = (sel, el = document) => el.querySelector(sel);
+const icon = (name) => `<i data-lucide="${name}" aria-hidden="true"></i>`;
+
+// Lucide (from the CDN) swaps every <i data-lucide> for an SVG; watch the DOM so icons in new markup render too.
+(() => {
+  if (!window.lucide) return; // offline: buttons keep their text labels
+  let queued = false;
+  const run = () => { queued = false; window.lucide.createIcons(); };
+  new MutationObserver(() => { if (!queued) { queued = true; requestAnimationFrame(run); } })
+    .observe(document.documentElement, { childList: true, subtree: true });
+  run();
+})();
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const center = (b) => [b.x + b.w / 2, b.y + b.h / 2];
 const round4 = (v) => Math.round(v * 1e4) / 1e4;
@@ -278,7 +298,7 @@ function px(b) {
 function rectFor(b, color, opts = {}) {
   const r = new fabric.Rect({
     ...px(b),
-    fill: opts.absent ? "rgba(255,107,107,0.14)" : hexA(color, opts.ghost ? 0.04 : 0.18),
+    fill: opts.absent ? hexA(ABSENT_COLOR, 0.14) : hexA(color, opts.ghost ? 0.04 : 0.16),
     stroke: color,
     strokeWidth: opts.ghost ? 1.5 : 2.5,
     strokeDashArray: opts.absent || opts.ghost || opts.placeholder ? [7, 5] : null,
@@ -299,7 +319,7 @@ function rectFor(b, color, opts = {}) {
 function tagFor(text, b, color) {
   return new fabric.Text(text, {
     left: b.x * W, top: Math.max(0, b.y * H - 21), fontSize: 15, fontWeight: "600",
-    fontFamily: "IBM Plex Sans, Segoe UI, sans-serif", fill: color, backgroundColor: "rgba(10,12,16,0.72)",
+    fontFamily: "IBM Plex Sans, Segoe UI, sans-serif", fill: color, backgroundColor: hexA(TOKENS.bg, 0.78),
     selectable: false, evented: false,
   });
 }
@@ -386,7 +406,7 @@ function onMouseDown(opt) {
   if (opt.target) return; // moving / resizing an existing box
   if (state.tab !== "start") return toast("Switch to Start to add objects. In End, drag boxes to where they finish.");
   const temp = new fabric.Rect({
-    left: p.x * W, top: p.y * H, width: 1, height: 1, fill: "rgba(255,255,255,0.08)", stroke: "#ffffff",
+    left: p.x * W, top: p.y * H, width: 1, height: 1, fill: hexA(TOKENS.text, 0.08), stroke: TOKENS.text,
     strokeDashArray: [4, 4], strokeWidth: 1.5, selectable: false, evented: false,
   });
   canvas.add(temp);
@@ -490,10 +510,7 @@ function buildPalette() {
     btn.dataset.tool = t.tool;
     if (t.label) btn.dataset.label = t.label;
     btn.title = t.title || `Drag on the picture to add a ${t.text.toLowerCase()}`;
-    const icon = t.glyph
-      ? `<span class="glyph" aria-hidden="true">${t.glyph}</span>`
-      : `<span class="sw" style="color:${COLORS[t.label]}" aria-hidden="true"></span>`;
-    btn.innerHTML = `${icon}${t.text}`;
+    btn.innerHTML = `${icon(t.icon)}${t.text}`;
     btn.addEventListener("click", () => setTool(t.tool, t.label));
     pal.appendChild(btn);
   }
@@ -673,7 +690,7 @@ function buildCard(r, rank, objects) {
   $(".score", el).textContent = r.score.toFixed(2);
   $(".explain", el).textContent = r.explanation || "";
   $(".why", el).innerHTML = whyMatched(r).map((w) =>
-    `<li class="${w.cls}"><span class="mark">${w.mark}</span>${escapeHtml(w.text)}</li>`).join("");
+    `<li class="${w.cls}"><span class="mark" aria-hidden="true">${w.mark}</span>${escapeHtml(w.text)}</li>`).join("");
 
   const abs = $(".absence", el);
   if (r.absence_ok !== null && r.absence_ok !== undefined) {
@@ -807,7 +824,7 @@ function drawOverlay(card, t) {
     ctx.setLineDash([7, 5]);
     ctx.lineWidth = 2;
     ctx.strokeStyle = ABSENT_COLOR;
-    ctx.fillStyle = r.absence_ok === false ? "rgba(255,107,107,0.22)" : "rgba(255,107,107,0.08)";
+    ctx.fillStyle = hexA(ABSENT_COLOR, r.absence_ok === false ? 0.22 : 0.08);
     ctx.fillRect(X(b.x), Y(b.y), SX(b.w), SY(b.h));
     ctx.strokeRect(X(b.x), Y(b.y), SX(b.w), SY(b.h));
     label(ctx, `no ${o.label}`, X(b.x) + 3, Y(b.y + b.h) - 4, ABSENT_COLOR);
@@ -815,7 +832,8 @@ function drawOverlay(card, t) {
   }
 
   for (const o of card.objects.filter((o) => !o.absent)) {
-    const color = COLORS[o.label] || "#ffffff";
+    const color = TOKENS.accent; // the sketch
+    const realColor = TOKENS.info; // what the camera actually saw
     const pts = drawnPath(o);
     const end = o.end || o.start;
 
@@ -824,12 +842,12 @@ function drawOverlay(card, t) {
       ctx.save();
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
-      ctx.strokeStyle = hexA(color, 0.22);
+      ctx.strokeStyle = hexA(color, 0.18);
       ctx.lineWidth = 7;
       polyline(ctx, pts.map(([x, y]) => [X(x), Y(y)]));
       const trail = [];
       for (let k = 0; k <= 24; k++) trail.push(pointAlong(pts, (u * k) / 24));
-      ctx.strokeStyle = hexA(color, 0.55);
+      ctx.strokeStyle = hexA(color, 0.4); // ghost path: amber at 40%
       ctx.lineWidth = 4;
       polyline(ctx, trail.map(([x, y]) => [X(x), Y(y)]));
       ctx.restore();
@@ -841,8 +859,8 @@ function drawOverlay(card, t) {
     ctx.save();
     ctx.setLineDash([6, 4]);
     ctx.lineWidth = 2;
-    ctx.strokeStyle = hexA(color, 0.95);
-    ctx.fillStyle = hexA(color, 0.1);
+    ctx.strokeStyle = color;
+    ctx.fillStyle = hexA(color, 0.08);
     ctx.fillRect(X(gx - gw / 2), Y(gy - gh / 2), SX(gw), SY(gh));
     ctx.strokeRect(X(gx - gw / 2), Y(gy - gh / 2), SX(gw), SY(gh));
     ctx.restore();
@@ -861,16 +879,16 @@ function drawOverlay(card, t) {
     if (real) {
       const [rx, ry] = center(real);
       ctx.save();
-      ctx.strokeStyle = hexA(color, 0.75);
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = hexA(TOKENS.text, 0.45);
+      ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(X(gx), Y(gy));
       ctx.lineTo(X(rx), Y(ry));
       ctx.stroke();
-      ctx.lineWidth = 2.5;
-      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = realColor;
       ctx.strokeRect(X(real.x), Y(real.y), SX(real.w), SY(real.h));
-      label(ctx, o.label, X(real.x), Y(real.y) - 4, color);
+      label(ctx, NOUNS[o.label] || o.label, X(real.x), Y(real.y) - 4, realColor);
       ctx.restore();
     }
   }
@@ -890,7 +908,7 @@ function label(ctx, text, x, y, color) {
   ctx.save();
   ctx.font = "600 12px 'IBM Plex Sans', 'Segoe UI', sans-serif";
   const tw = ctx.measureText(text).width;
-  ctx.fillStyle = "rgba(10,12,16,0.75)";
+  ctx.fillStyle = hexA(TOKENS.bg, 0.8);
   ctx.fillRect(x - 2, y - 12, tw + 6, 15);
   ctx.fillStyle = color;
   ctx.fillText(text, x + 1, y);
@@ -952,7 +970,7 @@ function applyZoom(card) {
   const btn = $(".zoom-btn", card.el);
   btn.hidden = card.zoom === FULL;
   btn.classList.toggle("on", card.zoomOn);
-  btn.textContent = card.zoomOn ? `🔍 ${(1 / card.zoom.w).toFixed(1)}×` : "🔍 off";
+  btn.innerHTML = `${icon("zoom-in")}${card.zoomOn ? `${(1 / card.zoom.w).toFixed(1)}×` : "off"}`;
   drawOverlay(card, card.started ? card.video.currentTime : card.posterTime);
 }
 
@@ -960,9 +978,9 @@ function applyZoom(card) {
 // AI verification (server-sent events)
 // ---------------------------------------------------------------------------
 const VERDICT_UI = {
-  YES: { cls: "yes", text: "✅ Confirmed", stamp: "✅" },
-  NO: { cls: "no", text: "❌ Not a match", stamp: "❌" },
-  UNSURE: { cls: "unsure", text: "⚠️ Not sure", stamp: "⚠️" },
+  YES: { cls: "yes", text: "Confirmed", icon: "check" },
+  NO: { cls: "no", text: "Not a match", icon: "x" },
+  UNSURE: { cls: "unsure", text: "Not sure", icon: "circle-help" },
 };
 
 function resetVerify() {
@@ -971,7 +989,7 @@ function resetVerify() {
   const btn = $("#verifyBtn");
   btn.disabled = true;
   btn.classList.remove("busy");
-  btn.textContent = "🤖 Ask AI to check these";
+  btn.innerHTML = `${icon("scan-search")}Ask AI to check these`;
   $("#verifySummary").hidden = true;
 }
 
@@ -981,20 +999,26 @@ function setVerdict(card, v) {
   const badge = $(".badge.verify", card.el);
   badge.hidden = false;
   badge.className = `badge verify ${ui.cls} landed`;
-  badge.textContent = ui.text;
+  badge.innerHTML = `${icon(ui.icon)}${ui.text}`;
   badge.title = `${v.model || "video model"}${v.cached ? " (cached)" : ""}`;
   $(".verify-reason", card.el).textContent = v.reason;
   const stamp = $(".stamp", card.el);
   stamp.hidden = false;
-  stamp.textContent = ui.stamp;
+  stamp.className = `stamp ${ui.cls}`;
+  stamp.innerHTML = `${icon(ui.icon)}${ui.text}`;
   stamp.title = v.reason;
+  // Cached verdicts arrive all at once: reveal them in rank order instead of in one flash.
+  stamp.style.animationDelay = v.cached ? `${Math.min(card.rank - 1, 10) * 70}ms` : "0ms";
+  stamp.style.animationName = "none";
+  void stamp.offsetWidth; // restart the reveal
+  stamp.style.animationName = "";
   card.el.classList.toggle("rejected", v.verdict === "NO");
 }
 
 function updateVerifySummary(counts, done, total) {
   const el = $("#verifySummary");
   el.hidden = false;
-  const extra = [counts.NO && `${counts.NO} ❌`, counts.UNSURE && `${counts.UNSURE} ⚠️`].filter(Boolean).join(", ");
+  const extra = [counts.NO && `${counts.NO} rejected`, counts.UNSURE && `${counts.UNSURE} unsure`].filter(Boolean).join(", ");
   if (done < total) {
     el.innerHTML = `AI is watching the clips… ${done}/${total}`;
   } else {
@@ -1013,19 +1037,21 @@ async function runVerify() {
   verifyAbort = controller;
   btn.disabled = true;
   btn.classList.add("busy");
-  btn.textContent = "🤖 AI is checking…";
+  btn.innerHTML = `${icon("loader")}AI is checking…`;
   for (const c of targets) {
     c.verdict = null;
     c.el.classList.remove("rejected");
     const b = $(".badge.verify", c.el);
     b.hidden = false;
     b.className = "badge verify checking";
-    b.textContent = "⏳ Watching…";
+    b.innerHTML = `${icon("loader")}Watching…`;
     b.title = "";
     $(".verify-reason", c.el).textContent = "The video AI is watching this clip.";
     const st = $(".stamp", c.el);
     st.hidden = false;
-    st.textContent = "⏳";
+    st.className = "stamp checking";
+    st.style.animationDelay = "0ms";
+    st.innerHTML = `${icon("loader")}Checking`;
   }
   const counts = { YES: 0, NO: 0, UNSURE: 0 };
   let done = 0;
@@ -1073,13 +1099,13 @@ async function runVerify() {
       verifyAbort = null;
       btn.disabled = false;
       btn.classList.remove("busy");
-      btn.textContent = "🤖 Ask AI to check again";
+      btn.innerHTML = `${icon("refresh-cw")}Ask AI to check again`;
     }
   }
 }
 
 // ---------------------------------------------------------------------------
-// ✨ Words -> Sketch and 📄 Diagram -> Sketch
+// Words -> Sketch and Diagram -> Sketch
 // ---------------------------------------------------------------------------
 function toStateObject(o) {
   return {
@@ -1137,7 +1163,7 @@ async function uploadDiagram() {
   const btn = $("#diagramBtn");
   btn.disabled = true;
   btn.classList.add("busy");
-  btn.textContent = "📄 Reading your drawing…";
+  btn.innerHTML = `${icon("loader")}Reading your drawing…`;
   $("#caption").textContent = "Reading your drawing…";
   try {
     const form = new FormData();
@@ -1149,14 +1175,14 @@ async function uploadDiagram() {
     state.bgUrl = URL.createObjectURL(file); // show the diagram faintly behind the boxes
     $("#showFrame").checked = true;
     setBackground();
-    toast(`📄 I found ${body.sketch.objects.length} things in your drawing (shown faintly behind). ` +
+    toast(`I found ${body.sketch.objects.length} things in your drawing (shown faintly behind). ` +
           "Fix anything that's off, then press “Find this moment”.");
   } catch (err) {
     toast(`Couldn't read the diagram: ${err.message}`, true);
   } finally {
     btn.disabled = false;
     btn.classList.remove("busy");
-    btn.textContent = "📄 Upload a drawing";
+    btn.innerHTML = `${icon("upload")}Upload a drawing`;
   }
 }
 
@@ -1262,12 +1288,12 @@ function whyMatched(r) {
     if (!(name in r.components)) continue;
     const v = r.components[name];
     const [good, partly, poor] = WHY_WORDS[name];
-    if (v >= 0.85) out.push({ cls: "yes", mark: "✔", text: good });
-    else if (v >= 0.6) out.push({ cls: "some", mark: "~", text: partly });
-    else out.push({ cls: "no", mark: "✗", text: poor });
+    if (v >= 0.85) out.push({ cls: "yes", mark: icon("check"), text: good });
+    else if (v >= 0.6) out.push({ cls: "some", mark: icon("minus"), text: partly });
+    else out.push({ cls: "no", mark: icon("x"), text: poor });
   }
-  if (r.absence_ok === true) out.push({ cls: "yes", mark: "✔", text: "nobody in the empty area" });
-  if (r.absence_ok === false) out.push({ cls: "no", mark: "✗", text: "someone is in the empty area" });
+  if (r.absence_ok === true) out.push({ cls: "yes", mark: icon("check"), text: "nobody in the empty area" });
+  if (r.absence_ok === false) out.push({ cls: "no", mark: icon("x"), text: "someone is in the empty area" });
   return out.slice(0, 5);
 }
 
@@ -1410,12 +1436,10 @@ function initGuide() {
 
 
 // ---------------------------------------------------------------------------
-// 📊 How often does this happen?
+// How often does this happen?
 // ---------------------------------------------------------------------------
-// Ordinal two-step amber (Great darker-bright, Good dim), validated with the dataviz palette checker
-// against the panel surface; Good is under 3:1, so every bar carries a visible total and a table view exists.
-const LEVEL_COLORS = { great: "#c2800e", good: "#87560a" };
-
+// Ordinal two-step amber (--accent and a 52% mix toward --surface, see style.css); the dim step is under 3:1,
+// so every bar carries a visible total and a table view exists.
 function barChart(title, rows, labelOf) {
   const max = Math.max(1, ...rows.map((r) => r.great + r.good));
   const cols = rows.map((r) => {
@@ -1440,9 +1464,9 @@ function renderHowOften(h) {
   const mins = barChart("Per minute of video", h.per_minute, (r) => `${r.minute}:00`);
   box.innerHTML = `
     <div class="how-head">
-      <h3>📊 How often does this happen?</h3>
-      <div class="legend"><span><i style="background:${LEVEL_COLORS.great}"></i>Great match</span>
-        <span><i style="background:${LEVEL_COLORS.good}"></i>Good match</span></div>
+      <h3>${icon("chart-column")}How often does this happen?</h3>
+      <div class="legend"><span><i class="sw great"></i>Great match</span>
+        <span><i class="sw good"></i>Good match</span></div>
     </div>
     <p class="insight">${escapeHtml(h.insight)} <span class="muted small">(${h.total} great or good matches in all)</span></p>
     <div class="charts">${cams.chart}${mins.chart}</div>
@@ -1450,7 +1474,7 @@ function renderHowOften(h) {
 }
 
 // ---------------------------------------------------------------------------
-// 🔗 Share link: the description + sketch + scope live in the URL hash
+// Share link: the description + sketch + scope live in the URL hash
 // ---------------------------------------------------------------------------
 function b64urlEncode(text) {
   const bytes = new TextEncoder().encode(text);
@@ -1520,14 +1544,14 @@ async function copyLink() {
   history.replaceState(null, "", url);
   try {
     await navigator.clipboard.writeText(url);
-    toast("🔗 Link copied. Anyone who opens it sees this sketch and its results.");
+    toast("Link copied. Anyone who opens it sees this sketch and its results.");
   } catch {
     window.prompt("Copy this link:", url);
   }
 }
 
 // ---------------------------------------------------------------------------
-// 📄 Incident report (printable page, "Save as PDF" via the browser's print)
+// Incident report (printable page, "Save as PDF" via the browser's print)
 // ---------------------------------------------------------------------------
 function sketchImage() {
   rendering = true;
@@ -1583,32 +1607,34 @@ async function openReport() {
   };
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>SketchSearch incident report</title>
 <style>
-  :root { font-family: "IBM Plex Sans", "Segoe UI", sans-serif; color: #1b1d22; }
-  body { margin: 0; background: #f4f2ec; }
-  .page { max-width: 860px; margin: 24px auto; background: #fff; padding: 36px 44px; box-shadow: 0 6px 30px rgba(0,0,0,.12); }
-  header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #c2800e; padding-bottom: 12px; }
+  :root { --ink: #1b1d22; --paper: #ffffff; --page: #f4f2ec; --line: #e3ded2; --soft: #666b75; --accent: #b37708;
+    --accent-fill: #c2800e; --ok: #1f7a45; --bad: #b23a2c; --warn: #8a5a00;
+    font-family: "IBM Plex Sans", "Segoe UI", sans-serif; color: var(--ink); }
+  body { margin: 0; background: var(--page); }
+  .page { max-width: 860px; margin: 24px auto; background: var(--paper); padding: 36px 44px; box-shadow: 0 6px 30px color-mix(in srgb, var(--ink) 12%, transparent); }
+  header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid var(--accent-fill); padding-bottom: 12px; }
   h1 { font-family: Archivo, "Segoe UI", sans-serif; margin: 0; font-size: 26px; }
-  h1 span { color: #b37708; } h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .1em; color: #6b6f78; margin: 26px 0 10px; }
-  .meta { text-align: right; font-size: 13px; color: #555; }
+  h1 span { color: var(--accent); } h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .1em; color: var(--soft); margin: 26px 0 10px; }
+  .meta { text-align: right; font-size: 13px; color: var(--soft); }
   .sketch { display: grid; grid-template-columns: 300px 1fr; gap: 20px; align-items: center; }
-  .sketch img { width: 300px; border-radius: 6px; border: 1px solid #ddd; }
+  .sketch img { width: 300px; border-radius: 6px; border: 1px solid var(--line); }
   .caption { font-size: 18px; font-weight: 600; }
   .counts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-  .count { border: 1px solid #e3ded2; border-radius: 8px; padding: 12px; } .count b { display: block; font-size: 28px; font-family: Archivo, sans-serif; }
-  .clip { display: grid; grid-template-columns: 220px 1fr; gap: 16px; padding: 12px 0; border-top: 1px solid #eee; break-inside: avoid; }
+  .count { border: 1px solid var(--line); border-radius: 8px; padding: 12px; } .count b { display: block; font-size: 28px; font-family: Archivo, sans-serif; }
+  .clip { display: grid; grid-template-columns: 220px 1fr; gap: 16px; padding: 12px 0; border-top: 1px solid var(--line); break-inside: avoid; }
   .clip img { width: 220px; border-radius: 6px; } .clip h3 { margin: 0 0 6px; font-size: 16px; }
-  .lvl { font-size: 12px; border-radius: 999px; padding: 2px 8px; margin-left: 6px; border: 1px solid #c2800e; color: #8a5a00; }
-  .lvl.great { background: #c2800e; color: #fff; }
-  .verdict { margin: 0 0 6px; font-weight: 600; } .verdict.yes { color: #1f7a45; } .verdict.no { color: #b23a2c; } .verdict.unsure { color: #a86b00; }
-  .muted { color: #666; margin: 0 0 4px; } .small { font-size: 12px; }
-  table { border-collapse: collapse; width: 100%; font-size: 14px; } td { padding: 4px 8px; border-bottom: 1px solid #eee; } td:first-child { color: #666; width: 140px; }
+  .lvl { font-size: 12px; border-radius: 999px; padding: 2px 8px; margin-left: 6px; border: 1px solid var(--accent-fill); color: var(--warn); }
+  .lvl.great { background: var(--accent-fill); color: var(--paper); }
+  .verdict { margin: 0 0 6px; font-weight: 600; } .verdict.yes { color: var(--ok); } .verdict.no { color: var(--bad); } .verdict.unsure { color: var(--warn); }
+  .muted { color: var(--soft); margin: 0 0 4px; } .small { font-size: 12px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; } td { padding: 4px 8px; border-bottom: 1px solid var(--line); } td:first-child { color: var(--soft); width: 140px; }
   .toolbar { max-width: 860px; margin: 16px auto 0; display: flex; gap: 10px; justify-content: flex-end; }
-  .toolbar button { font: inherit; padding: 8px 16px; border-radius: 8px; border: 1px solid #c2800e; background: #c2800e; color: #fff; cursor: pointer; }
-  .toolbar button.ghost { background: #fff; color: #8a5a00; }
-  footer { margin-top: 24px; font-size: 12px; color: #888; }
-  @media print { body { background: #fff; } .toolbar { display: none; } .page { box-shadow: none; margin: 0; max-width: none; padding: 0; } }
+  .toolbar button { font: inherit; padding: 8px 16px; border-radius: 8px; border: 1px solid var(--accent-fill); background: var(--accent-fill); color: var(--paper); cursor: pointer; }
+  .toolbar button.ghost { background: var(--paper); color: var(--warn); }
+  footer { margin-top: 24px; font-size: 12px; color: var(--soft); }
+  @media print { body { background: var(--paper); } .toolbar { display: none; } .page { box-shadow: none; margin: 0; max-width: none; padding: 0; } }
 </style></head><body>
-<div class="toolbar"><button class="ghost" onclick="window.close()">Close</button><button onclick="window.print()">🖨 Save as PDF</button></div>
+<div class="toolbar"><button class="ghost" onclick="window.close()">Close</button><button onclick="window.print()">Save as PDF</button></div>
 <div class="page">
   <header><div><h1>Sketch<span>Search</span> incident report</h1><div class="muted">Moments matching a sketched scene, checked by a video AI</div></div>
     <div class="meta">${escapeHtml(new Date().toLocaleString())}</div></header>

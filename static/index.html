@@ -10,25 +10,26 @@
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="static/style.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lucide@0.469.0/dist/umd/lucide.min.js"></script>
 </head>
 <body class="mode-landing">
   <header class="topbar">
     <button class="brand" id="homeLink" title="Start a new search">Sketch<span>Search</span></button>
     <ol class="steps" id="steps" aria-label="Progress">
-      <li data-step="describe"><span class="dot">1</span>Describe</li>
-      <li data-step="sketch"><span class="dot">2</span>Sketch</li>
-      <li data-step="find"><span class="dot">3</span>Find</li>
-      <li data-step="check"><span class="dot">4</span>Check</li>
+      <li data-step="describe"><span class="dot">1</span><span class="step-label">Describe</span></li>
+      <li data-step="sketch"><span class="dot">2</span><span class="step-label">Sketch</span></li>
+      <li data-step="find"><span class="dot">3</span><span class="step-label">Find</span></li>
+      <li data-step="check"><span class="dot">4</span><span class="step-label">Check</span></li>
     </ol>
     <div class="header-right">
       <label class="demo-toggle" title="Replay pre-computed results so the demo never waits (scripts/warm_demo.py)">
-        <input type="checkbox" id="demoMode"> Demo mode
+        <input type="checkbox" id="demoMode"><i data-lucide="clapperboard"></i><span class="label">Demo mode</span>
       </label>
       <nav class="tabs" role="tablist">
         <button class="tab active" role="tab" data-view="search" aria-selected="true">Search</button>
         <button class="tab" role="tab" data-view="agent" aria-selected="false">Agent</button>
       </nav>
-      <button class="help-btn" id="helpBtn" title="How it works" aria-label="How it works">?</button>
+      <button class="help-btn" id="helpBtn" title="How it works" aria-label="How it works"><i data-lucide="circle-help"></i></button>
     </div>
   </header>
 
@@ -43,14 +44,14 @@
       </h1>
       <p class="tagline">Words get you close. A sketch gets you exact. AI proves it.</p>
       <form class="searchbar" id="textForm" autocomplete="off">
-        <span class="searchbar-icon" aria-hidden="true">⌕</span>
+        <span class="searchbar-icon" aria-hidden="true"><i data-lucide="search"></i></span>
         <input id="sketchText" type="text" placeholder="Describe the moment you're looking for…" aria-label="Describe the moment">
-        <button type="button" class="icon-btn" id="micBtn" hidden title="Speak instead of typing" aria-label="Speak">🎙</button>
+        <button type="button" class="icon-btn" id="micBtn" hidden title="Speak instead of typing" aria-label="Speak"><i data-lucide="mic"></i></button>
         <button type="submit" class="go-btn" id="sketchIt">Find it</button>
       </form>
       <div class="hero-actions">
-        <button class="ghost-btn" id="drawBtn">✏️ Draw it instead</button>
-        <button class="ghost-btn" id="diagramBtn">📄 Upload a drawing</button>
+        <button class="ghost-btn" id="drawBtn"><i data-lucide="pencil"></i>Draw it instead</button>
+        <button class="ghost-btn" id="diagramBtn"><i data-lucide="upload"></i>Upload a drawing</button>
         <input id="diagramFile" type="file" accept="image/png,image/jpeg,image/webp" hidden>
       </div>
       <div class="chips" id="examples" aria-label="Examples"><span class="chips-label">Try:</span></div>
@@ -67,9 +68,9 @@
         <div class="canvas-wrap" id="canvasWrap">
           <canvas id="sketch"></canvas>
           <div class="edit-group" aria-label="Edit">
-            <button class="icon-btn" id="undo" title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>
-            <button class="icon-btn" id="delete" title="Delete selected (Del)" aria-label="Delete">⌫</button>
-            <button class="icon-btn" id="clear" title="Start over" aria-label="Clear all">✕</button>
+            <button class="icon-btn" id="undo" title="Undo (Ctrl+Z)" aria-label="Undo"><i data-lucide="undo-2"></i></button>
+            <button class="icon-btn" id="delete" title="Delete selected (Del)" aria-label="Delete"><i data-lucide="delete"></i></button>
+            <button class="icon-btn" id="clear" title="Start over" aria-label="Clear all"><i data-lucide="x"></i></button>
           </div>
           <div class="canvas-empty" id="canvasEmpty">Choose <b>Person</b> or <b>Forklift</b> above, then drag a box on the picture.</div>
         </div>
@@ -99,15 +100,15 @@
           <label class="scope">Search in
             <select id="scope" aria-label="Search in"><option value="">All cameras</option></select>
           </label>
+          <div class="share-group">
+            <button class="ghost-btn" id="copyLinkBtn" disabled title="Copy a link that reopens this search"><i data-lucide="link"></i><span class="label">Copy link</span></button>
+            <button class="ghost-btn" id="reportBtn" disabled title="A printable report you can save as PDF"><i data-lucide="file-text"></i><span class="label">Create report</span></button>
+          </div>
           <span class="status" id="status"></span>
         </div>
         <div class="check-bar">
-          <button class="ai-btn" id="verifyBtn" disabled>🤖 Ask AI to check these</button>
+          <button class="ai-btn" id="verifyBtn" disabled><i data-lucide="scan-search"></i>Ask AI to check these</button>
           <span class="verify-summary" id="verifySummary" hidden></span>
-          <div class="share-group">
-            <button class="ghost-btn" id="copyLinkBtn" disabled title="Copy a link that reopens this search">🔗 Copy link</button>
-            <button class="ghost-btn" id="reportBtn" disabled title="A printable report you can save as PDF">📄 Create report</button>
-          </div>
         </div>
         <div class="results" id="results">
           <div class="state">Your matches will appear here.</div>
@@ -145,30 +146,30 @@
 
   <!-- ================= Quick guide ================= -->
   <dialog class="guide" id="guide" aria-label="How SketchSearch works">
-    <button class="guide-close" id="guideClose" aria-label="Close">✕</button>
+    <button class="guide-close" id="guideClose" aria-label="Close"><i data-lucide="x"></i></button>
     <div class="slides" id="slides">
       <section class="slide active">
-        <div class="slide-art">💬</div>
+        <div class="slide-art"><i data-lucide="message-square"></i></div>
         <h2>1 · Describe the moment</h2>
         <p>Type it the way you'd tell a colleague: <em>“a worker walking toward the forklift.”</em>
           You can also draw it, or upload a sketch you made on paper.</p>
       </section>
       <section class="slide">
-        <div class="slide-art">✏️</div>
+        <div class="slide-art"><i data-lucide="pencil-ruler"></i></div>
         <h2>2 · We turn it into a stencil</h2>
         <p>SketchSearch draws a simple picture: who is where, and which way they move.
           If it's not quite right, drag the boxes to fix it.</p>
       </section>
       <section class="slide">
-        <div class="slide-art">🎞️</div>
+        <div class="slide-art"><i data-lucide="film"></i></div>
         <h2>3 · We slide the stencil over every clip</h2>
         <p>Like holding a stencil over hours of video, we check every second of every camera
           and show you the clips where it fits best.</p>
       </section>
       <section class="slide">
-        <div class="slide-art">🤖</div>
+        <div class="slide-art"><i data-lucide="scan-search"></i></div>
         <h2>4 · AI confirms the real ones</h2>
-        <p>A video AI watches the best matches and answers ✅ yes, ❌ no or ⚠️ not sure, with a one-line reason.
+        <p>A video AI watches the best matches and answers yes, no or not sure, with a one-line reason.
           Rejected clips stay visible, so you can judge for yourself.</p>
       </section>
     </div>
@@ -186,9 +187,9 @@
         <video muted playsinline loop preload="metadata"></video>
         <canvas class="overlay"></canvas>
         <div class="timeline"><div class="win"></div><div class="head"></div></div>
-        <button class="zoom-btn" title="Zoom to the action (click to toggle)">🔍</button>
+        <button class="zoom-btn" title="Zoom to the action (click to toggle)"><i data-lucide="zoom-in"></i></button>
         <span class="stamp" hidden></span>
-        <span class="play-hint">▶ hover to play</span>
+        <span class="play-hint"><i data-lucide="play"></i>hover to play</span>
       </div>
       <div class="card-meta">
         <span class="match"></span>
@@ -210,7 +211,7 @@
           <p class="verify-reason">Press “Ask AI to check these” and a video AI will watch this clip.</p>
           <div class="feature-actions">
             <span class="badge absence" hidden></span>
-            <button class="ghost-btn more">✏️ More like this</button>
+            <button class="ghost-btn more"><i data-lucide="pencil"></i>More like this</button>
           </div>
         </div>
       </div>
