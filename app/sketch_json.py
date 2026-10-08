@@ -1,10 +1,10 @@
 """Parse and normalize model-written sketch JSON (words -> sketch, diagram -> sketch)."""
 
-import json
 import re
 
 from pydantic import ValidationError
 
+from app.jsonfix import loads_lenient
 from app.models import Box, Sketch, SketchObject
 
 LABELS = ("person", "forklift", "robot", "transporter")
@@ -37,15 +37,12 @@ class SketchParseError(ValueError):
 
 
 def _extract_json(text: str) -> dict:
-    text = text.strip()
-    text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text)
-    start, end = text.find("{"), text.rfind("}")
-    if start < 0 or end <= start:
-        raise SketchParseError("no JSON object found")
     try:
-        data = json.loads(text[start:end + 1])
-    except json.JSONDecodeError as e:
-        raise SketchParseError(f"invalid JSON: {e}") from None
+        data = loads_lenient(text)
+    except ValueError as e:
+        raise SketchParseError(str(e)) from None
+    if not isinstance(data, dict):
+        raise SketchParseError('expected {"objects": [...]}')
     if isinstance(data.get("sketch"), dict):
         data = data["sketch"]
     if not isinstance(data.get("objects"), list):

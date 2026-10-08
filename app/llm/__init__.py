@@ -27,6 +27,15 @@ def get_client(provider: str = LLM_PROVIDER) -> tuple[OpenAI, str]:
     return OpenAI(base_url=cfg["base_url"], api_key=cfg["api_key"], timeout=60, max_retries=2), cfg["model"]
 
 
+def failed_generation(e: BadRequestError) -> str | None:
+    """The rejected text of a json_validate_failed error, if that is what this is."""
+    body = e.body if isinstance(e.body, dict) else {}
+    err = body.get("error", body) if isinstance(body.get("error", body), dict) else body
+    if err.get("code") == "json_validate_failed" and isinstance(err.get("failed_generation"), str):
+        return err["failed_generation"]
+    return None
+
+
 @weave.op(name="llm_chat_json")
 def chat_json(messages: list[dict], provider: str = LLM_PROVIDER, temperature: float = 0.2) -> str:
     """One chat completion that should return a JSON object; returns the raw text."""
@@ -39,6 +48,12 @@ def chat_json(messages: list[dict], provider: str = LLM_PROVIDER, temperature: f
         try:
             resp = client.chat.completions.create(response_format={"type": "json_object"}, **kwargs)
         except BadRequestError as e:
+            failed = failed_generation(e)
+            if failed is not None:
+                # Groq's JSON mode rejects slightly malformed output (e.g. one stray bracket) with a 400 and
+                # returns it as failed_generation. Hand it back: the callers' lenient parser repairs bracket
+                # mistakes and their retry loop asks the model again for anything worse.
+                return failed
             if "response_format" not in str(e):
                 raise
             resp = client.chat.completions.create(**kwargs)  # provider/model without JSON mode

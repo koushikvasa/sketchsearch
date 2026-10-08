@@ -14,6 +14,7 @@ import weave
 
 from app.agent.words_to_sketch import SCENE
 from app.config import LLM_PROVIDER
+from app.jsonfix import loads_lenient
 from app.llm import chat_json, provider_config
 from app.search import run_search
 from app.sketch_json import SKETCH_FORMAT, SketchParseError, normalize_objects
@@ -58,13 +59,13 @@ The "sketch" follows this format:
 
 
 def _parse(raw: str) -> dict:
-    start, end = raw.find("{"), raw.rfind("}")
-    if start < 0 or end <= start:
-        raise SketchParseError("no JSON object found")
     try:
-        return json.loads(raw[start:end + 1])
-    except json.JSONDecodeError as e:
-        raise SketchParseError(f"invalid JSON: {e}") from None
+        data = loads_lenient(raw)
+    except ValueError as e:
+        raise SketchParseError(str(e)) from None
+    if not isinstance(data, dict):
+        raise SketchParseError("expected a JSON object")
+    return data
 
 
 @weave.op(name="agent_plan")
