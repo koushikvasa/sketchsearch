@@ -25,13 +25,10 @@ def two_people(converging: bool = True) -> Sketch:
     ])
 
 
+# Ordered as the landing page's example chips.
 PRESETS: dict[str, dict] = {
-    "converging": {
-        "title": "Two people converging",
-        "description": "Two people in the aisle walking toward each other",
-        "sketch": two_people(converging=True),
-    },
     "forklift_approach": {
+        "chip": "Worker walks toward forklift",
         "title": "Person approaches forklift",
         "description": "A worker walks up to the forklift at the end of the aisle",
         "sketch": Sketch(objects=[
@@ -40,7 +37,14 @@ PRESETS: dict[str, dict] = {
         ]),
         "camera_id": "warehouse_cam1",
     },
+    "converging": {
+        "chip": "Two people meet in an aisle",
+        "title": "Two people converging",
+        "description": "Two people in the aisle walking toward each other",
+        "sketch": two_people(converging=True),
+    },
     "forklift_alone": {
+        "chip": "Forklift with nobody nearby",
         "title": "Forklift, nobody nearby",
         "description": "Forklift with no person inside the zone around it",
         "sketch": Sketch(objects=[
@@ -48,5 +52,14 @@ PRESETS: dict[str, dict] = {
             SketchObject(id="nobody", label="person", start_box=Box(x=0.30, y=0.0, w=0.30, h=0.30), absent=True),
         ]),
         "camera_id": "warehouse_cam1",
+    },
+    "group": {
+        "chip": "Group of 3 people",
+        "title": "Group of three people",
+        "description": "Three people standing close together in the aisle",
+        "sketch": Sketch(objects=[
+            SketchObject(id=f"p{i}", label="person", start_box=box(cx, cy, (0.035, 0.16)))
+            for i, (cx, cy) in enumerate([(0.47, 0.45), (0.52, 0.47), (0.495, 0.53)], 1)
+        ]),
     },
 }

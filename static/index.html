@@ -5,111 +5,125 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SketchSearch</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E✎%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="static/style.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
 </head>
-<body>
+<body class="mode-landing">
   <header class="topbar">
-    <div class="brand">
-      <span class="logo">SketchSearch</span>
-      <span class="tagline">Words get you close. A sketch gets you exact. AI proves it.</span>
-    </div>
+    <button class="brand" id="homeLink" title="Start a new search">Sketch<span>Search</span></button>
+    <ol class="steps" id="steps" aria-label="Progress">
+      <li data-step="describe"><span class="dot">1</span>Describe</li>
+      <li data-step="sketch"><span class="dot">2</span>Sketch</li>
+      <li data-step="find"><span class="dot">3</span>Find</li>
+      <li data-step="check"><span class="dot">4</span>Check</li>
+    </ol>
     <div class="header-right">
-      <label class="check demo-toggle" title="Replay pre-computed agent runs and auto-run cached AI checks on presets (scripts/warm_demo.py)">
-        <input type="checkbox" id="demoMode"> 🎬 Demo mode
+      <label class="demo-toggle" title="Replay pre-computed results so the demo never waits (scripts/warm_demo.py)">
+        <input type="checkbox" id="demoMode"> Demo mode
       </label>
       <nav class="tabs" role="tablist">
         <button class="tab active" role="tab" data-view="search" aria-selected="true">Search</button>
         <button class="tab" role="tab" data-view="agent" aria-selected="false">Agent</button>
       </nav>
+      <button class="help-btn" id="helpBtn" title="How it works" aria-label="How it works">?</button>
     </div>
   </header>
 
-  <main class="layout" id="searchView">
-    <!-- ================= Left: sketch ================= -->
-    <section class="panel sketch-panel" aria-label="Sketch">
-      <div class="row presets" id="presets" aria-label="Demo presets"></div>
-
-      <div class="row controls">
-        <label class="field">Camera
-          <select id="camera"></select>
-        </label>
-        <label class="check"><input type="checkbox" id="showFrame" checked> Show frame</label>
-        <label class="check"><input type="checkbox" id="onlyCamera"> Only this camera</label>
-      </div>
-
-      <div class="row toolbar">
-        <div class="group" id="palette" role="radiogroup" aria-label="Object label"></div>
-        <div class="group" role="radiogroup" aria-label="Tool">
-          <button class="tool active" data-tool="box" title="Draw a box (B)">▭ Box</button>
-          <button class="tool" data-tool="path" title="Drag from an object to draw its path (P)">➚ Path</button>
-          <button class="tool" data-tool="absent" title="Nobody-here zone for the selected label (N)">🚫 Absent</button>
-        </div>
-      </div>
-
-      <div class="row toolbar">
-        <div class="group keyframes" role="tablist" aria-label="Keyframe">
-          <button class="kf active" data-tab="start">Start</button>
-          <button class="kf" data-tab="end">End</button>
-        </div>
-        <span class="kf-help" id="kfHelp">Draw where things are at the start.</span>
-        <div class="group right">
-          <button id="undo" title="Undo (Ctrl+Z)">↶ Undo</button>
-          <button id="delete" title="Delete selected (Del)">✕ Delete</button>
-          <button id="clear" title="Remove everything">Clear</button>
-        </div>
-      </div>
-
-      <div class="canvas-wrap" id="canvasWrap">
-        <canvas id="sketch"></canvas>
-        <div class="canvas-empty" id="canvasEmpty">Drag on the frame to draw a box, or pick a demo preset above.</div>
-      </div>
-
-      <div class="hint" id="hint" hidden>💡 Tip: add a second object or a path. Relationships make search precise.</div>
-      <div class="toast" id="toast" hidden></div>
-
-      <form class="row text-row" id="textForm">
-        <input id="sketchText" type="text" autocomplete="off"
-               placeholder="✨ Describe the moment, e.g. “worker on the left, forklift coming at them”">
-        <button type="submit" id="sketchIt" title="Turn the sentence into a sketch, then search">✨ Sketch it</button>
+  <main class="search-view" id="searchView">
+    <!-- ================= Landing hero (collapses into the studio's search bar) ================= -->
+    <section class="hero" id="hero">
+      <h1 class="logo" aria-label="SketchSearch">
+        <span>Sketch</span><span class="logo-accent">Search</span>
+        <svg class="logo-stroke" viewBox="0 0 400 24" preserveAspectRatio="none" aria-hidden="true">
+          <path d="M4 15 C 70 6, 120 21, 190 12 S 320 6, 396 13"/>
+        </svg>
+      </h1>
+      <p class="tagline">Words get you close. A sketch gets you exact. AI proves it.</p>
+      <form class="searchbar" id="textForm" autocomplete="off">
+        <span class="searchbar-icon" aria-hidden="true">⌕</span>
+        <input id="sketchText" type="text" placeholder="Describe the moment you're looking for…" aria-label="Describe the moment">
+        <button type="button" class="icon-btn" id="micBtn" hidden title="Speak instead of typing" aria-label="Speak">🎙</button>
+        <button type="submit" class="go-btn" id="sketchIt">Find it</button>
       </form>
-      <div class="row">
-        <button id="diagramBtn" title="Upload a photo or scan of a hand-drawn diagram">📄 Upload diagram</button>
+      <div class="hero-actions">
+        <button class="ghost-btn" id="drawBtn">✏️ Draw it instead</button>
+        <button class="ghost-btn" id="diagramBtn">📄 Upload a drawing</button>
         <input id="diagramFile" type="file" accept="image/png,image/jpeg,image/webp" hidden>
-        <span class="muted small">Stick figures, boxes labelled “forklift”, arrows, an X for “nobody here”.</span>
       </div>
-
-      <button id="search" class="primary big">Search</button>
+      <div class="chips" id="examples" aria-label="Examples"><span class="chips-label">Try:</span></div>
     </section>
 
-    <!-- ================= Right: results ================= -->
-    <section class="panel results-panel" aria-label="Results">
-      <div class="results-head">
-        <h2>Results</h2>
-        <span class="status" id="status">Draw a sketch and press Search.</span>
-        <button id="verifyBtn" disabled title="A video model watches the top 10 clips and checks each against your sketch">🤖 AI check top 10</button>
-        <span class="verify-summary" id="verifySummary" hidden></span>
+    <!-- ================= Studio ================= -->
+    <section class="studio" id="studio" aria-label="Studio">
+      <div class="panel sketch-panel">
+        <div class="panel-head">
+          <p class="eyebrow">Here's what I understood</p>
+          <p class="caption" id="caption">Pick a shape below, then drag on the picture.</p>
+        </div>
+        <div class="toolbar tool-group" id="palette" role="toolbar" aria-label="Drawing tools"></div>
+        <div class="canvas-wrap" id="canvasWrap">
+          <canvas id="sketch"></canvas>
+          <div class="edit-group" aria-label="Edit">
+            <button class="icon-btn" id="undo" title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>
+            <button class="icon-btn" id="delete" title="Delete selected (Del)" aria-label="Delete">⌫</button>
+            <button class="icon-btn" id="clear" title="Start over" aria-label="Clear all">✕</button>
+          </div>
+          <div class="canvas-empty" id="canvasEmpty">Choose <b>Person</b> or <b>Forklift</b> above, then drag a box on the picture.</div>
+        </div>
+        <p class="notice warn" id="moveWarn" hidden>Keep moves short — about 1.5 s of motion. Long arrows rarely match.</p>
+        <p class="notice" id="hint" hidden>Tip: add a second object or an arrow. Relationships make the search precise.</p>
+        <details class="advanced">
+          <summary>Advanced</summary>
+          <div class="advanced-body">
+            <div class="row">
+              <div class="segmented" role="tablist" aria-label="Keyframe">
+                <button class="kf active" data-tab="start">Start</button>
+                <button class="kf" data-tab="end">End</button>
+              </div>
+              <span class="muted small" id="kfHelp">Draw where things are at the start.</span>
+            </div>
+            <div class="row">
+              <label class="field">Background camera <select id="camera"></select></label>
+              <label class="check"><input type="checkbox" id="showFrame" checked> Show camera picture</label>
+            </div>
+          </div>
+        </details>
+        <button class="primary-btn big" id="search">Find this moment</button>
       </div>
-      <div class="legend">
-        <span><i class="sw solid"></i> real track</span>
-        <span><i class="sw dashed"></i> your sketch</span>
-        <span><i class="sw ghost"></i> ghost replay of your path</span>
+
+      <div class="panel results-panel">
+        <div class="results-head">
+          <label class="scope">Search in
+            <select id="scope" aria-label="Search in"><option value="">All cameras</option></select>
+          </label>
+          <span class="status" id="status"></span>
+        </div>
+        <div class="check-bar">
+          <button class="ai-btn" id="verifyBtn" disabled>🤖 Ask AI to check these</button>
+          <span class="verify-summary" id="verifySummary" hidden></span>
+        </div>
+        <div class="results" id="results">
+          <div class="state">Your matches will appear here.</div>
+        </div>
       </div>
-      <div id="results" class="results"></div>
     </section>
   </main>
 
+  <!-- ================= Agent tab (static/agent.js) ================= -->
   <main class="agent-layout" id="agentView" hidden>
     <section class="panel agent-panel" aria-label="Agent">
       <form class="row agent-form" id="agentForm">
         <input id="agentGoal" type="text" autocomplete="off" placeholder="What should the agent look for? e.g. risky moments near the forklift">
-        <button type="submit" id="agentRun" class="primary">Run agent</button>
+        <button type="submit" id="agentRun" class="primary-btn">Run agent</button>
       </form>
       <div class="row">
-        <button id="agentPreset" class="preset-goal"></button>
-        <span class="muted small" id="agentHint">The agent plans 3-4 sketches, searches, has the video model check the top 3 of each,
-          refines weak sketches once, and writes a report. At most 12 new video-model calls per run.</span>
+        <button id="agentPreset" class="chip"></button>
       </div>
+      <p class="muted small" id="agentHint">The agent plans 3-4 sketches, searches, has the video AI check the top 3 of each,
+        improves weak sketches once, and writes a report. At most 12 new AI checks per run.</p>
       <h2 class="agent-h">Trace</h2>
       <ol class="trace" id="trace"><li class="trace-empty muted">Run the agent to see its plan, searches and checks here.</li></ol>
     </section>
@@ -117,36 +131,83 @@
       <div class="results-head">
         <h2>Report</h2>
         <span class="status" id="agentStatus"></span>
-        <button id="copyReport" disabled>Copy markdown</button>
+        <button id="copyReport" class="ghost-btn" disabled>Copy markdown</button>
       </div>
       <article class="report" id="report"><p class="muted">The agent's report appears here when the run finishes.</p></article>
     </section>
   </main>
 
+  <div class="toast" id="toast" hidden role="status"></div>
+
+  <!-- ================= Quick guide ================= -->
+  <dialog class="guide" id="guide" aria-label="How SketchSearch works">
+    <button class="guide-close" id="guideClose" aria-label="Close">✕</button>
+    <div class="slides" id="slides">
+      <section class="slide active">
+        <div class="slide-art">💬</div>
+        <h2>1 · Describe the moment</h2>
+        <p>Type it the way you'd tell a colleague: <em>“a worker walking toward the forklift.”</em>
+          You can also draw it, or upload a sketch you made on paper.</p>
+      </section>
+      <section class="slide">
+        <div class="slide-art">✏️</div>
+        <h2>2 · We turn it into a stencil</h2>
+        <p>SketchSearch draws a simple picture: who is where, and which way they move.
+          If it's not quite right, drag the boxes to fix it.</p>
+      </section>
+      <section class="slide">
+        <div class="slide-art">🎞️</div>
+        <h2>3 · We slide the stencil over every clip</h2>
+        <p>Like holding a stencil over hours of video, we check every second of every camera
+          and show you the clips where it fits best.</p>
+      </section>
+      <section class="slide">
+        <div class="slide-art">🤖</div>
+        <h2>4 · AI confirms the real ones</h2>
+        <p>A video AI watches the best matches and answers ✅ yes, ❌ no or ⚠️ not sure, with a one-line reason.
+          Rejected clips stay visible, so you can judge for yourself.</p>
+      </section>
+    </div>
+    <div class="guide-nav">
+      <button class="ghost-btn" id="guidePrev">Back</button>
+      <div class="guide-dots" id="guideDots"></div>
+      <button class="primary-btn" id="guideNext">Next</button>
+    </div>
+  </dialog>
+
+  <!-- ================= Result card ================= -->
   <template id="cardTpl">
     <article class="card">
       <div class="media">
         <video muted playsinline loop preload="metadata"></video>
         <canvas class="overlay"></canvas>
         <div class="timeline"><div class="win"></div><div class="head"></div></div>
-        <span class="rank"></span>
         <button class="zoom-btn" title="Zoom to the action (click to toggle)">🔍</button>
-        <span class="play-hint">hover or click to play</span>
+        <span class="stamp" hidden></span>
+        <span class="play-hint">▶ hover to play</span>
       </div>
-      <div class="card-body">
-        <div class="card-title">
-          <span class="seg"></span>
-          <span class="score"></span>
-        </div>
-        <p class="explain"></p>
-        <div class="badges">
-          <span class="badge absence" hidden></span>
-          <button class="badge verify" hidden></button>
-        </div>
-        <p class="verify-reason" hidden></p>
+      <div class="card-meta">
+        <span class="match"></span>
+        <span class="where"></span>
+      </div>
+      <div class="details" role="tooltip">
+        <div class="score-line">Match score <b class="score"></b></div>
         <div class="bars"></div>
-        <div class="card-actions">
-          <button class="more">More like this</button>
+      </div>
+      <div class="feature-body">
+        <div class="why-box">
+          <p class="box-title">Why it matched</p>
+          <ul class="why"></ul>
+          <p class="explain"></p>
+        </div>
+        <div class="verdict-box">
+          <p class="box-title">AI check</p>
+          <button class="badge verify">Not checked yet</button>
+          <p class="verify-reason">Press “Ask AI to check these” and a video AI will watch this clip.</p>
+          <div class="feature-actions">
+            <span class="badge absence" hidden></span>
+            <button class="ghost-btn more">✏️ More like this</button>
+          </div>
         </div>
       </div>
     </article>

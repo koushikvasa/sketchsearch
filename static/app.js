@@ -4,12 +4,33 @@
 // Constants
 // ---------------------------------------------------------------------------
 const LABELS = ["person", "forklift", "robot", "transporter"];
-const COLORS = { person: "#4fc3f7", forklift: "#ffb74d", robot: "#ce93d8", transporter: "#81c784" };
-const ABSENT_COLOR = "#ff6b6b";
+const COLORS = { person: "#5ec8ff", forklift: "#ff8a5c", robot: "#c39bff", transporter: "#74d99f" };
+const ABSENT_COLOR = "#ef6b5d";
+const LABEL_NAMES = { person: "Person", forklift: "Forklift", robot: "Robot", transporter: "Cart" };
+const NOUNS = { person: "person", forklift: "forklift", robot: "robot", transporter: "cart" };
+const PLURALS = { person: "people", forklift: "forklifts", robot: "robots", transporter: "carts" };
+const MOVE_WARN = 0.25; // a drawn move longer than this is far more than 1.5 s of motion
+const TOOLBAR = [
+  { tool: "box", label: "person", text: "Person" },
+  { tool: "box", label: "forklift", text: "Forklift" },
+  { tool: "box", label: "robot", text: "Robot" },
+  { tool: "box", label: "transporter", text: "Cart" },
+  { tool: "path", text: "Arrow", glyph: "➜", title: "Press on a box and drag the way it moves" },
+  { tool: "absent", label: "person", text: "Empty area", glyph: "⦸", title: "Mark an area where no one may be" },
+];
 const DEFAULT_SIZE = { person: [0.03, 0.13], forklift: [0.05, 0.1], robot: [0.05, 0.05], transporter: [0.07, 0.04] };
 const ABSENT_SIZE = [0.25, 0.25];
 const COMPONENTS = ["relations", "position", "motion", "size", "keyframe"];
-const COMPONENT_NAMES = { relations: "relations", position: "position", motion: "motion", size: "size", keyframe: "end layout" };
+const COMPONENT_NAMES = { relations: "layout", position: "position", motion: "movement", size: "size", keyframe: "end spot" };
+// Plain words for "why it matched": [good, partly, poor].
+const WHY_WORDS = {
+  relations: ["same layout", "similar layout", "different layout"],
+  motion: ["same movement", "similar movement", "different movement"],
+  position: ["same spot", "slightly different position", "different position"],
+  keyframe: ["ends in the same place", "ends nearby", "ends somewhere else"],
+  size: ["same distance from the camera", "slightly nearer or farther", "different distance from the camera"],
+};
+const WHY_ORDER = ["relations", "motion", "position", "keyframe", "size"];
 const TOP_N = 12;
 const VERIFY_N = 10;
 const FULL = { x: 0, y: 0, w: 1, h: 1 };
@@ -105,6 +126,7 @@ const state = {
   bgUrl: null,
   text: null, // sentence a Words -> Sketch came from
   history: [],
+  checked: false, // AI check finished for the current results
 };
 
 let canvas = null;
@@ -277,7 +299,7 @@ function rectFor(b, color, opts = {}) {
 function tagFor(text, b, color) {
   return new fabric.Text(text, {
     left: b.x * W, top: Math.max(0, b.y * H - 21), fontSize: 15, fontWeight: "600",
-    fontFamily: "Segoe UI, system-ui, sans-serif", fill: color, backgroundColor: "rgba(10,12,16,0.72)",
+    fontFamily: "IBM Plex Sans, Segoe UI, sans-serif", fill: color, backgroundColor: "rgba(10,12,16,0.72)",
     selectable: false, evented: false,
   });
 }
@@ -301,7 +323,7 @@ function addArrow(pts, color, dashed) {
 
 function drawObject(o) {
   const color = o.absent ? ABSENT_COLOR : COLORS[o.label];
-  const name = o.absent ? `🚫 no ${o.label}` : o.label;
+  const name = o.absent ? "empty area" : NOUNS[o.label] || o.label;
   if (!o.absent) addArrow(drawnPath(o), color, !o.path);
   if (state.tab === "start") {
     if (o.end && !o.absent) canvas.add(rectFor(o.end, color, { ghost: true }));
@@ -312,7 +334,7 @@ function drawObject(o) {
     if (!o.absent) {
       const b = o.end || o.start;
       canvas.add(rectFor(b, color, { interactive: true, id: o.id, kind: "end", placeholder: !o.end }));
-      canvas.add(tagFor(o.end ? `${o.label} · end` : `${o.label} · drag to set end`, b, color));
+      canvas.add(tagFor(o.end ? `${NOUNS[o.label]} · end` : `${NOUNS[o.label]} · drag to set end`, b, color));
     }
   }
 }
@@ -462,27 +484,34 @@ function onModified(e) {
 // ---------------------------------------------------------------------------
 function buildPalette() {
   const pal = $("#palette");
-  for (const label of LABELS) {
+  for (const t of TOOLBAR) {
     const btn = document.createElement("button");
-    btn.className = "label-btn";
-    btn.dataset.label = label;
-    btn.title = `Next box is a ${label}`;
-    btn.innerHTML = `<span class="chip" style="background:${COLORS[label]}"></span>${label}`;
-    btn.addEventListener("click", () => setLabel(label));
+    btn.className = "tb-btn";
+    btn.dataset.tool = t.tool;
+    if (t.label) btn.dataset.label = t.label;
+    btn.title = t.title || `Drag on the picture to add a ${t.text.toLowerCase()}`;
+    const icon = t.glyph
+      ? `<span class="glyph" aria-hidden="true">${t.glyph}</span>`
+      : `<span class="sw" style="color:${COLORS[t.label]}" aria-hidden="true"></span>`;
+    btn.innerHTML = `${icon}${t.text}`;
+    btn.addEventListener("click", () => setTool(t.tool, t.label));
     pal.appendChild(btn);
   }
 }
 
 function setLabel(label) {
-  state.label = label;
-  updateUi();
+  setTool("box", label);
 }
 
-function setTool(tool) {
+const toolTips = new Set();
+function setTool(tool, label = null) {
   state.tool = tool;
+  if (label) state.label = label;
   render();
-  if (tool === "path") toast("Path: press on an object and drag the way it moves.");
-  if (tool === "absent") toast(`Absent: draw a zone where no ${state.label} may be. Pick the label first.`);
+  if (toolTips.has(tool)) return; // explain each tool once
+  toolTips.add(tool);
+  if (tool === "path") toast("Arrow: press on a box and drag the way it moves. Keep it short: about 1.5 seconds of walking.");
+  if (tool === "absent") toast("Empty area: drag a rectangle where nobody should be, e.g. around the forklift.");
 }
 
 function setTab(tab) {
@@ -491,9 +520,13 @@ function setTab(tab) {
 }
 
 function updateUi() {
-  for (const b of document.querySelectorAll(".label-btn")) b.classList.toggle("active", b.dataset.label === state.label);
-  for (const b of document.querySelectorAll(".tool")) b.classList.toggle("active", b.dataset.tool === state.tool);
+  for (const b of document.querySelectorAll(".tb-btn")) {
+    b.classList.toggle("active", b.dataset.tool === state.tool && (state.tool !== "box" || b.dataset.label === state.label));
+  }
   for (const b of document.querySelectorAll(".kf")) b.classList.toggle("active", b.dataset.tab === state.tab);
+  $("#caption").textContent = describeSketch(state.objects);
+  $("#moveWarn").hidden = !state.objects.some((o) => !o.absent && moveLength(o) > MOVE_WARN);
+  setProgress();
   $("#kfHelp").textContent = KF_HELP[state.tab];
   $("#canvasEmpty").hidden = state.objects.length > 0;
   $("#hint").hidden = state.objects.filter((o) => !o.absent).length !== 1;
@@ -531,7 +564,7 @@ function toSketch() {
       id: o.id, label: o.label, absent: o.absent, start_box: o.start,
       end_box: o.absent ? null : o.end, path: o.absent ? null : o.path,
     })),
-    camera_ids: $("#onlyCamera").checked && state.cameraId ? [state.cameraId] : null,
+    camera_ids: $("#scope").value ? [$("#scope").value] : null,
     text: state.text,
   };
 }
@@ -551,15 +584,15 @@ function showState(kind, message = "") {
   cards = [];
   const box = $("#results");
   if (kind === "loading") {
-    box.innerHTML = `<div class="state"><div class="spinner"></div>Searching every 1.5 s window…</div>`;
+    box.innerHTML = `<div class="state"><div class="spinner"></div>Sliding your sketch over every clip…</div>`;
     $("#status").textContent = "Searching…";
   } else if (kind === "empty") {
-    box.innerHTML = `<div class="state">No segment has all of these objects at once.<br>
-      Try fewer objects, another label, or untick “Only this camera”.</div>`;
-    $("#status").textContent = "0 matches";
+    box.innerHTML = `<div class="state">No clip shows all of these things at the same time.<br>
+      Try removing a shape, or search in “All cameras”.</div>`;
+    $("#status").textContent = "No matches";
   } else if (kind === "error") {
-    box.innerHTML = `<div class="state error">Search failed: ${escapeHtml(message)}<br><button id="retry">Try again</button></div>`;
-    $("#status").textContent = "Error";
+    box.innerHTML = `<div class="state error">Something went wrong: ${escapeHtml(message)}<br><button id="retry">Try again</button></div>`;
+    $("#status").textContent = "";
     $("#retry").addEventListener("click", runSearch);
   }
 }
@@ -591,16 +624,19 @@ function renderResults(res, sketch) {
   if (!res.results.length) return showState("empty");
   stopAllVideos();
   const box = $("#results");
-  box.innerHTML = "";
-  const boosted = res.weights && res.weights.motion >= 0.25;
-  $("#status").textContent = `Top ${res.results.length} · ${res.elapsed_ms} ms` +
-    (boosted ? " · motion weighted up (you drew clear movement)" : "");
+  box.innerHTML = `<div class="featured" id="featured"></div>
+    <p class="strip-head">More matches · click one to see it big</p><div class="strip" id="strip"></div>`;
+  $("#status").textContent = `${res.results.length} moments found in ${(res.elapsed_ms / 1000).toFixed(2)} s`;
   const objects = sketch.objects.map((o) => ({
     ...o, start: o.start_box, end: o.end_box, path: o.path,
   }));
   cards = res.results.map((r, i) => buildCard(r, i + 1, objects));
-  cards.forEach((c) => box.appendChild(c.el));
+  $("#featured").appendChild(cards[0].el);
+  cards[0].featured = true;
+  cards.slice(1).forEach((c) => $("#strip").appendChild(c.el));
   $("#verifyBtn").disabled = false;
+  state.checked = false;
+  setProgress();
   for (const card of cards) {
     api(`api/segments/${encodeURIComponent(card.result.segment_id)}`)
       .then((seg) => { card.segment = seg; updateZoom(card); })
@@ -618,16 +654,22 @@ function buildCard(r, rank, objects) {
   } else {
     video.src = `${r.clip_url}#t=${(r.window[0] + r.window[1]) / 2}`; // no keyframe image: show a frame of the clip
   }
-  $(".rank", el).textContent = `#${rank}`;
-  $(".seg", el).innerHTML = `${escapeHtml(cameraName(r.camera_id))} <small>${r.start}–${r.end} s · best ${r.window[0]}–${r.window[1]} s</small>`;
+  const m = matchLabel(r.score);
+  const match = $(".match", el);
+  match.innerHTML = `${m.text.split(" ")[0]}<span class="word"> match</span>`;
+  match.className = `match ${m.cls}`;
+  match.title = "Hover for the numbers";
+  $(".where", el).textContent = whereLabel(r);
   $(".score", el).textContent = r.score.toFixed(2);
   $(".explain", el).textContent = r.explanation || "";
+  $(".why", el).innerHTML = whyMatched(r).map((w) =>
+    `<li class="${w.cls}"><span class="mark">${w.mark}</span>${escapeHtml(w.text)}</li>`).join("");
 
   const abs = $(".absence", el);
   if (r.absence_ok !== null && r.absence_ok !== undefined) {
     abs.hidden = false;
     abs.className = `badge absence ${r.absence_ok ? "ok" : "bad"}`;
-    abs.textContent = r.absence_ok ? "✅ nobody in the zone" : "⚠️ zone violated";
+    abs.textContent = r.absence_ok ? "Empty area: nobody there" : "Empty area: someone is there";
   }
 
   const bars = $(".bars", el);
@@ -644,7 +686,7 @@ function buildCard(r, rank, objects) {
   const card = {
     el, video, overlay: $(".overlay", el), result: r, objects, segment: null,
     pinned: false, playing: false, started: false, duration, posterTime: duration / 2,
-    zoom: FULL, zoomOn: true, verdict: null,
+    zoom: FULL, zoomOn: true, verdict: null, featured: false, rank,
   };
   updateZoom(card);
   const zoomBtn = $(".zoom-btn", el);
@@ -652,11 +694,6 @@ function buildCard(r, rank, objects) {
     e.stopPropagation();
     card.zoomOn = !card.zoomOn;
     applyZoom(card);
-  });
-  const vbadge = $(".badge.verify", el);
-  vbadge.addEventListener("click", () => {
-    const reason = $(".verify-reason", el);
-    if (card.verdict) reason.hidden = !reason.hidden;
   });
   const win = $(".timeline .win", el);
   win.style.left = `${(r.window[0] / duration) * 100}%`;
@@ -666,6 +703,7 @@ function buildCard(r, rank, objects) {
   media.addEventListener("mouseenter", () => playCard(card));
   media.addEventListener("mouseleave", () => { if (!card.pinned) pauseCard(card); });
   media.addEventListener("click", () => {
+    if (!card.featured) return featureCard(card);
     card.pinned = !card.pinned;
     card.pinned ? playCard(card) : pauseCard(card);
   });
@@ -840,7 +878,7 @@ function polyline(ctx, P) {
 
 function label(ctx, text, x, y, color) {
   ctx.save();
-  ctx.font = "600 12px Segoe UI, system-ui, sans-serif";
+  ctx.font = "600 12px 'IBM Plex Sans', 'Segoe UI', sans-serif";
   const tw = ctx.measureText(text).width;
   ctx.fillStyle = "rgba(10,12,16,0.75)";
   ctx.fillRect(x - 2, y - 12, tw + 6, 15);
@@ -860,7 +898,7 @@ async function moreLikeThis(r) {
     });
     loadSketch({ objects }, { cameraId: r.camera_id, bgUrl: r.frame_url });
     window.scrollTo({ top: 0, behavior: "smooth" });
-    toast(`Loaded ${objects.length} objects from ${cameraName(r.camera_id)} at ${r.start + res.window[0]}–${r.start + res.window[1]} s. Edit them, then Search.`);
+    toast(`Copied this moment into the sketch (${whereLabel(r)}). Change anything, then press “Find this moment”.`);
   } catch (err) {
     toast(`Couldn't load that segment: ${err.message}`, true);
   }
@@ -912,9 +950,9 @@ function applyZoom(card) {
 // AI verification (server-sent events)
 // ---------------------------------------------------------------------------
 const VERDICT_UI = {
-  YES: { cls: "yes", text: "✅ AI: yes" },
-  NO: { cls: "no", text: "❌ AI: no" },
-  UNSURE: { cls: "unsure", text: "⚠️ AI: unsure" },
+  YES: { cls: "yes", text: "✅ Confirmed", stamp: "✅" },
+  NO: { cls: "no", text: "❌ Not a match", stamp: "❌" },
+  UNSURE: { cls: "unsure", text: "⚠️ Not sure", stamp: "⚠️" },
 };
 
 function resetVerify() {
@@ -923,7 +961,7 @@ function resetVerify() {
   const btn = $("#verifyBtn");
   btn.disabled = true;
   btn.classList.remove("busy");
-  btn.textContent = `🤖 AI check top ${VERIFY_N}`;
+  btn.textContent = "🤖 Ask AI to check these";
   $("#verifySummary").hidden = true;
 }
 
@@ -934,10 +972,12 @@ function setVerdict(card, v) {
   badge.hidden = false;
   badge.className = `badge verify ${ui.cls} landed`;
   badge.textContent = ui.text;
-  badge.title = `${v.reason}\n(${v.model || "video model"}${v.cached ? ", cached" : ""}; click to show or hide)`;
-  const reason = $(".verify-reason", card.el);
-  reason.textContent = v.reason;
-  reason.hidden = v.verdict === "YES"; // the honest "no" / "unsure" reasons show right away
+  badge.title = `${v.model || "video model"}${v.cached ? " (cached)" : ""}`;
+  $(".verify-reason", card.el).textContent = v.reason;
+  const stamp = $(".stamp", card.el);
+  stamp.hidden = false;
+  stamp.textContent = ui.stamp;
+  stamp.title = v.reason;
   card.el.classList.toggle("rejected", v.verdict === "NO");
 }
 
@@ -945,9 +985,13 @@ function updateVerifySummary(counts, done, total) {
   const el = $("#verifySummary");
   el.hidden = false;
   const extra = [counts.NO && `${counts.NO} ❌`, counts.UNSURE && `${counts.UNSURE} ⚠️`].filter(Boolean).join(", ");
-  el.textContent = done < total
-    ? `Verified ${counts.YES} of ${total} · checking ${done}/${total}…`
-    : `Verified ${counts.YES} of ${total}${extra ? ` (${extra})` : ""}`;
+  if (done < total) {
+    el.innerHTML = `AI is watching the clips… ${done}/${total}`;
+  } else {
+    el.innerHTML = `AI confirmed <b>${counts.YES}</b> of ${total}` + (extra ? ` <span class="muted small">(${extra})</span>` : "");
+    state.checked = true;
+    setProgress();
+  }
 }
 
 async function runVerify() {
@@ -959,16 +1003,19 @@ async function runVerify() {
   verifyAbort = controller;
   btn.disabled = true;
   btn.classList.add("busy");
-  btn.textContent = "🤖 Checking…";
+  btn.textContent = "🤖 AI is checking…";
   for (const c of targets) {
     c.verdict = null;
     c.el.classList.remove("rejected");
     const b = $(".badge.verify", c.el);
     b.hidden = false;
     b.className = "badge verify checking";
-    b.textContent = "⏳ AI checking…";
+    b.textContent = "⏳ Watching…";
     b.title = "";
-    $(".verify-reason", c.el).hidden = true;
+    $(".verify-reason", c.el).textContent = "The video AI is watching this clip.";
+    const st = $(".stamp", c.el);
+    st.hidden = false;
+    st.textContent = "⏳";
   }
   const counts = { YES: 0, NO: 0, UNSURE: 0 };
   let done = 0;
@@ -1010,13 +1057,13 @@ async function runVerify() {
   } catch (err) {
     if (err.name === "AbortError") return;
     toast(`AI check failed: ${err.message}`, true);
-    for (const c of targets) if (!c.verdict) $(".badge.verify", c.el).hidden = true;
+    for (const c of targets) if (!c.verdict) $(".stamp", c.el).hidden = true;
   } finally {
     if (verifyAbort === controller) {
       verifyAbort = null;
       btn.disabled = false;
       btn.classList.remove("busy");
-      btn.textContent = `🤖 AI check top ${VERIFY_N}`;
+      btn.textContent = "🤖 Ask AI to check again";
     }
   }
 }
@@ -1048,22 +1095,26 @@ async function sketchFromText(e) {
   e.preventDefault();
   const text = $("#sketchText").value.trim();
   if (text.length < 2) return toast("Describe the moment first, e.g. “two people walking toward each other”.");
+  const preset = presetForText(text);
+  if (preset) return runPreset(preset);
+  enterStudio();
+  $("#caption").textContent = "Reading your description…";
   const btn = $("#sketchIt");
   btn.disabled = true;
   btn.classList.add("busy");
-  btn.textContent = "✨ Sketching…";
+  btn.textContent = "Sketching…";
   try {
     const res = await api("api/text-to-sketch", { method: "POST", body: JSON.stringify({ text }) });
     await animateSketch(res.sketch.objects);
     state.text = text;
-    toast(`✨ Sketched by ${res.model} (${res.provider}) in ${(res.elapsed_ms / 1000).toFixed(1)} s. Searching…`);
+    toast("Here's the sketch. Searching every clip now…");
     await runSearch();
   } catch (err) {
     toast(`Couldn't sketch that: ${err.message}`, true);
   } finally {
     btn.disabled = false;
     btn.classList.remove("busy");
-    btn.textContent = "✨ Sketch it";
+    btn.textContent = "Find it";
   }
 }
 
@@ -1072,10 +1123,12 @@ async function uploadDiagram() {
   const file = input.files?.[0];
   input.value = "";
   if (!file) return;
+  enterStudio();
   const btn = $("#diagramBtn");
   btn.disabled = true;
   btn.classList.add("busy");
-  btn.textContent = "📄 Reading diagram…";
+  btn.textContent = "📄 Reading your drawing…";
+  $("#caption").textContent = "Reading your drawing…";
   try {
     const form = new FormData();
     form.append("file", file);
@@ -1086,15 +1139,262 @@ async function uploadDiagram() {
     state.bgUrl = URL.createObjectURL(file); // show the diagram faintly behind the boxes
     $("#showFrame").checked = true;
     setBackground();
-    toast(`📄 ${body.sketch.objects.length} objects read from the diagram by ${body.model}. ` +
-          "Your diagram is the faint background: adjust the boxes, then Search.");
+    toast(`📄 I found ${body.sketch.objects.length} things in your drawing (shown faintly behind). ` +
+          "Fix anything that's off, then press “Find this moment”.");
   } catch (err) {
     toast(`Couldn't read the diagram: ${err.message}`, true);
   } finally {
     btn.disabled = false;
     btn.classList.remove("busy");
-    btn.textContent = "📄 Upload diagram";
+    btn.textContent = "📄 Upload a drawing";
   }
+}
+
+
+// ---------------------------------------------------------------------------
+// Plain-language helpers (caption, match labels, why it matched)
+// ---------------------------------------------------------------------------
+function moveLength(o) {
+  const pts = drawnPath(o);
+  return Math.hypot(pts[pts.length - 1][0] - pts[0][0], pts[pts.length - 1][1] - pts[0][1]);
+}
+
+function placeWords([x, y]) {
+  if (y < 0.25) return "at the far end";
+  if (y > 0.65) return "near the camera";
+  return x < 0.4 ? "on the left" : x > 0.6 ? "on the right" : "in the middle";
+}
+
+function moveWords(o) {
+  const pts = drawnPath(o);
+  const [dx, dy] = [pts[pts.length - 1][0] - pts[0][0], pts[pts.length - 1][1] - pts[0][1]];
+  const len = Math.hypot(dx, dy);
+  if (len < 0.03) return null;
+  const parts = [];
+  if (Math.abs(dx) >= 0.4 * len) parts.push(dx > 0 ? "right" : "left");
+  if (Math.abs(dy) >= 0.4 * len) parts.push(dy < 0 ? "away from the camera" : "toward the camera");
+  return `${o.label === "person" ? "walking" : "moving"} ${parts.join(" and ")}`;
+}
+
+/** "A person on the left walking right, toward a forklift; nobody inside the empty area." */
+function describeSketch(objects) {
+  const present = objects.filter((o) => !o.absent);
+  if (!present.length && !objects.length) return "Pick a shape below, then drag on the picture.";
+  const counts = {};
+  present.forEach((o) => { counts[o.label] = (counts[o.label] || 0) + 1; });
+  const end = (o) => { const p = drawnPath(o); return p[p.length - 1]; };
+  const clauses = [];
+  const used = new Set();
+  // A still group of the same label reads better as one phrase.
+  for (const [lbl, n] of Object.entries(counts)) {
+    const group = present.filter((o) => o.label === lbl && !moveWords(o));
+    if (n >= 3 && group.length === n) {
+      const cs = group.map((o) => center(o.start));
+      const mid = [cs.reduce((a, c) => a + c[0], 0) / n, cs.reduce((a, c) => a + c[1], 0) / n];
+      clauses.push(`a group of ${n} ${PLURALS[lbl]} standing together ${placeWords(mid)}`);
+      group.forEach((o) => used.add(o.id));
+    }
+  }
+  for (const o of present) {
+    if (used.has(o.id)) continue;
+    let text = `a ${NOUNS[o.label]} ${placeWords(center(o.start))}`;
+    const mv = moveWords(o);
+    if (!mv) {
+      text += o.label === "person" ? ", standing still" : ", not moving";
+    } else {
+      text += ` ${mv}`;
+      for (const other of present) {
+        if (other === o) continue;
+        const before = Math.hypot(center(o.start)[0] - center(other.start)[0], center(o.start)[1] - center(other.start)[1]);
+        const after = Math.hypot(end(o)[0] - end(other)[0], end(o)[1] - end(other)[1]);
+        const name = counts[other.label] > 1 ? `another ${NOUNS[other.label]}` : `the ${NOUNS[other.label]}`;
+        if (after < before - 0.03) { text += `, toward ${name}`; break; }
+        if (after > before + 0.03) { text += `, away from ${name}`; break; }
+      }
+    }
+    clauses.push(text);
+  }
+  for (const z of objects.filter((o) => o.absent)) {
+    const anchor = present.find((o) => {
+      const [cx, cy] = center(o.start);
+      return cx >= z.start.x && cx <= z.start.x + z.start.w && cy >= z.start.y && cy <= z.start.y + z.start.h;
+    });
+    const who = z.label === "person" ? "nobody" : `no ${NOUNS[z.label]}`;
+    clauses.push(anchor ? `${who} near the ${NOUNS[anchor.label]}` : `${who} inside the empty area`);
+  }
+  const text = clauses.join("; ");
+  return text ? text[0].toUpperCase() + text.slice(1) + "." : "Pick a shape below, then drag on the picture.";
+}
+
+function matchLabel(score) {
+  if (score >= 0.85) return { text: "Great match", cls: "great" };
+  if (score >= 0.7) return { text: "Good match", cls: "good" };
+  return { text: "Weak match", cls: "weak" };
+}
+
+function shortCamera(cameraId) {
+  return cameraName(cameraId).replace(/^warehouse cam\s*/i, "Camera ");
+}
+
+function clock(seconds) {
+  const s = Math.max(0, Math.round(seconds));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+function whereLabel(r) {
+  return `${shortCamera(r.camera_id)} · ${clock(r.start + r.window[0])}`;
+}
+
+function whyMatched(r) {
+  const out = [];
+  for (const name of WHY_ORDER) {
+    if (!(name in r.components)) continue;
+    const v = r.components[name];
+    const [good, partly, poor] = WHY_WORDS[name];
+    if (v >= 0.85) out.push({ cls: "yes", mark: "✔", text: good });
+    else if (v >= 0.6) out.push({ cls: "some", mark: "~", text: partly });
+    else out.push({ cls: "no", mark: "✗", text: poor });
+  }
+  if (r.absence_ok === true) out.push({ cls: "yes", mark: "✔", text: "nobody in the empty area" });
+  if (r.absence_ok === false) out.push({ cls: "no", mark: "✗", text: "someone is in the empty area" });
+  return out.slice(0, 5);
+}
+
+// ---------------------------------------------------------------------------
+// Landing -> studio, featured result, progress
+// ---------------------------------------------------------------------------
+function enterStudio() {
+  if (document.body.classList.contains("mode-studio")) return;
+  document.body.classList.replace("mode-landing", "mode-studio");
+  setProgress();
+}
+
+function goHome() {
+  document.body.classList.replace("mode-studio", "mode-landing");
+  $("#sketchText").focus();
+  setProgress();
+}
+
+function startDrawing() {
+  enterStudio();
+  if (state.objects.length) {
+    snapshot();
+    state.objects = [];
+    state.selectedId = null;
+    state.text = null;
+    $("#sketchText").value = "";
+  }
+  setTool("box", "person");
+  toast("Choose Person, Forklift, Robot or Cart, then drag a box on the picture. Add an Arrow to show movement.");
+}
+
+function featureCard(card) {
+  const current = cards.find((c) => c.featured);
+  if (!current || current === card) return;
+  pauseCard(current);
+  current.pinned = false;
+  current.featured = false;
+  card.featured = true;
+  const strip = $("#strip");
+  // The old featured card goes back to its rank position in the strip.
+  const after = cards.filter((c) => !c.featured && c.rank > current.rank && c !== current)
+    .sort((a, b) => a.rank - b.rank)[0];
+  strip.insertBefore(current.el, after ? after.el : null);
+  $("#featured").appendChild(card.el);
+  requestAnimationFrame(() => {
+    applyZoom(card);
+    applyZoom(current);
+  });
+  $("#featured").scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function setProgress() {
+  const studio = document.body.classList.contains("mode-studio");
+  const done = {
+    describe: studio,
+    sketch: studio && state.objects.length > 0,
+    find: cards.length > 0,
+    check: state.checked,
+  };
+  let activeSet = false;
+  for (const li of document.querySelectorAll("#steps li")) {
+    const isDone = done[li.dataset.step];
+    li.classList.toggle("done", isDone);
+    const active = !isDone && !activeSet;
+    li.classList.toggle("active", active);
+    if (active) activeSet = true;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Examples, voice, quick guide
+// ---------------------------------------------------------------------------
+function presetForText(text) {
+  const t = text.trim().toLowerCase();
+  return (state.presets || []).find((p) => (p.chip || "").toLowerCase() === t);
+}
+
+async function runPreset(p) {
+  enterStudio();
+  $("#sketchText").value = p.chip || p.title;
+  if (p.camera_id) selectCamera(p.camera_id);
+  await animateSketch(p.sketch.objects);
+  state.text = null;
+  await runSearch();
+  // Demo mode: verdicts are pre-cached by scripts/warm_demo.py, so check right away.
+  if ($("#demoMode").checked && cards.length) runVerify();
+}
+
+function initMic() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const btn = $("#micBtn");
+  if (!SR) return; // stays hidden
+  btn.hidden = false;
+  let rec = null;
+  btn.addEventListener("click", () => {
+    if (rec) { rec.stop(); return; }
+    rec = new SR();
+    rec.lang = "en-US";
+    rec.interimResults = true;
+    let finalText = "";
+    rec.onresult = (e) => {
+      const said = Array.from(e.results).map((r) => r[0].transcript).join(" ");
+      $("#sketchText").value = said;
+      if (e.results[e.results.length - 1].isFinal) finalText = said;
+    };
+    rec.onerror = (e) => toast(`Couldn't hear that (${e.error}). You can type instead.`, true);
+    rec.onend = () => {
+      btn.classList.remove("listening");
+      rec = null;
+      if (finalText.trim()) $("#textForm").requestSubmit();
+    };
+    btn.classList.add("listening");
+    rec.start();
+  });
+}
+
+function initGuide() {
+  const dlg = $("#guide");
+  const slides = [...document.querySelectorAll("#slides .slide")];
+  const dots = $("#guideDots");
+  dots.innerHTML = slides.map(() => "<span></span>").join("");
+  let i = 0;
+  const show = (n) => {
+    i = clamp(n, 0, slides.length - 1);
+    slides.forEach((s, k) => s.classList.toggle("active", k === i));
+    [...dots.children].forEach((d, k) => d.classList.toggle("on", k === i));
+    $("#guidePrev").disabled = i === 0;
+    $("#guideNext").textContent = i === slides.length - 1 ? "Got it" : "Next";
+  };
+  $("#helpBtn").addEventListener("click", () => { show(0); dlg.showModal(); });
+  $("#guideClose").addEventListener("click", () => dlg.close());
+  $("#guidePrev").addEventListener("click", () => show(i - 1));
+  $("#guideNext").addEventListener("click", () => (i === slides.length - 1 ? dlg.close() : show(i + 1)));
+  dlg.addEventListener("click", (e) => { if (e.target === dlg) dlg.close(); });
+  dlg.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowRight") show(i + 1);
+    if (e.key === "ArrowLeft") show(i - 1);
+  });
 }
 
 
@@ -1102,7 +1402,6 @@ async function uploadDiagram() {
 // Boot
 // ---------------------------------------------------------------------------
 function bindControls() {
-  for (const b of document.querySelectorAll(".tool")) b.addEventListener("click", () => setTool(b.dataset.tool));
   for (const b of document.querySelectorAll(".kf")) b.addEventListener("click", () => setTab(b.dataset.tab));
   $("#undo").addEventListener("click", undo);
   $("#delete").addEventListener("click", deleteSelected);
@@ -1114,6 +1413,14 @@ function bindControls() {
   $("#diagramFile").addEventListener("change", uploadDiagram);
   $("#showFrame").addEventListener("change", setBackground);
   $("#camera").addEventListener("change", (e) => selectCamera(e.target.value));
+  $("#scope").addEventListener("change", (e) => {
+    if (e.target.value) selectCamera(e.target.value);
+    if (state.objects.length && cards.length) runSearch();
+  });
+  $("#drawBtn").addEventListener("click", startDrawing);
+  $("#homeLink").addEventListener("click", goHome);
+  initMic();
+  initGuide();
   document.addEventListener("keydown", (e) => {
     const el = document.activeElement;
     if (el && (el.tagName === "TEXTAREA" || el.tagName === "SELECT" || (el.tagName === "INPUT" && el.type === "text"))) return;
@@ -1123,8 +1430,8 @@ function bindControls() {
     else if (e.key === "Delete" || e.key === "Backspace") { if (state.selectedId) { e.preventDefault(); deleteSelected(); } }
     else if (!e.ctrlKey && !e.metaKey && !e.altKey) {
       if (key === "b") setTool("box");
-      else if (key === "p") setTool("path");
-      else if (key === "n") setTool("absent");
+      else if (key === "p" || key === "a") setTool("path");
+      else if (key === "n" || key === "e") setTool("absent", "person");
     }
   });
 }
@@ -1142,17 +1449,17 @@ async function init() {
     const [cams, presets] = await Promise.all([api("api/cameras"), api("api/presets")]);
     state.cameras = cams;
     $("#camera").innerHTML = cams.map((c) => `<option value="${c.camera_id}">${escapeHtml(c.name)}</option>`).join("");
+    $("#scope").insertAdjacentHTML("beforeend",
+      cams.map((c) => `<option value="${c.camera_id}">${escapeHtml(shortCamera(c.camera_id))}</option>`).join(""));
     selectCamera((cams.find((c) => c.camera_id === "warehouse_cam1") || cams[0]).camera_id);
-    const holder = $("#presets");
+    state.presets = presets;
+    const holder = $("#examples");
     for (const p of presets) {
       const b = document.createElement("button");
-      b.textContent = p.title;
+      b.className = "chip";
+      b.textContent = p.chip || p.title;
       b.title = p.description;
-      b.addEventListener("click", () => {
-        loadSketch(p.sketch, { cameraId: p.camera_id || state.cameraId });
-        // Demo mode: verdicts are pre-cached by scripts/warm_demo.py, so check right away.
-        runSearch().then(() => { if ($("#demoMode").checked && cards.length) runVerify(); });
-      });
+      b.addEventListener("click", () => runPreset(p));
       holder.appendChild(b);
     }
   } catch (err) {
