@@ -31,6 +31,7 @@ def _caption_fallback(source, sketch: Sketch) -> tuple[Sketch, set[str] | None]:
 
 # Match levels shown in the UI (static/app.js matchLabel uses the same numbers).
 GREAT, GOOD = 0.85, 0.70
+MAX_MARKS = 400  # timeline ticks sent to the UI
 
 
 def short_camera(name: str) -> str:
@@ -46,16 +47,18 @@ def how_often(source, ranked: list[dict]) -> dict:
         hits = [r for r in good if source.get_segment(r["segment_id"]).camera_id == cam_id]
         per_camera.append({"camera_id": cam_id, "name": short_camera(cams[cam_id].get("name") or cam_id),
                            "great": sum(r["score"] >= GREAT for r in hits), "good": sum(r["score"] < GREAT for r in hits)})
-    minutes = {}
+    minutes, marks = {}, []
     for r in good:
         seg = source.get_segment(r["segment_id"])
-        m = int((seg.start + r["window"][0]) // 60)
-        minutes.setdefault(m, {"great": 0, "good": 0})["great" if r["score"] >= GREAT else "good"] += 1
+        t = seg.start + r["window"][0]
+        minutes.setdefault(int(t // 60), {"great": 0, "good": 0})["great" if r["score"] >= GREAT else "good"] += 1
+        if len(marks) < MAX_MARKS:  # ranked best first, so a cap keeps the strongest
+            marks.append({"camera_id": seg.camera_id, "t": round(t, 1), "great": r["score"] >= GREAT})
     durations = [c.get("duration") or 0 for c in cams.values()]
     last = max([int(max(durations) // 60) if durations and max(durations) else 0, *minutes.keys(), 0])
     per_minute = [{"minute": m, **minutes.get(m, {"great": 0, "good": 0})} for m in range(last + 1)]
-    return {"per_camera": per_camera, "per_minute": per_minute, "total": len(good),
-            "insight": insight(per_camera, per_minute)}
+    return {"per_camera": per_camera, "per_minute": per_minute, "total": len(good), "marks": marks,
+            "duration": max(durations, default=0) or None, "insight": insight(per_camera, per_minute)}
 
 
 def insight(per_camera: list[dict], per_minute: list[dict]) -> str:

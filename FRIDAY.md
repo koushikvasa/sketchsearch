@@ -167,5 +167,7 @@ plus Playwright at `/app` without a trailing slash).
 ## Demo-day checks
 
 - `/app/api/health` shows `"source": "vast"`, a non-zero segment count, the Cosmos model and `"weave_tracing": true`.
-- Turn on 🎬 **Demo mode** after `warm_demo.py`. Presets then show instant verdicts and the agent replays.
+- Turn on **Demo mode** after `warm_demo.py` (⋮ menu, top right, or press `D`; a Demo badge shows it is on).
+  Example chips then show all 10 verdicts instantly and the agent replays. New sketches still auto-check only the top 3 live.
+- Presenter keys: `←`/`→` previous or next match, `Space` play or pause, `C` check more with AI, `?` quick guide.
 - Backup: record a screen capture of the local (GT) demo tonight.

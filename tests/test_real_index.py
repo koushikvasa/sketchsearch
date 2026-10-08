@@ -108,6 +108,9 @@ def test_search_reports_counts_and_how_often(source):
     assert per_cam["Camera 1"] == res["how_often"]["total"] and per_cam["Camera 0"] == 0
     assert res["how_often"]["insight"].startswith("Most matches on Camera 1, between minutes")
     assert sum(m["great"] + m["good"] for m in res["how_often"]["per_minute"]) == res["how_often"]["total"]
+    marks = res["how_often"]["marks"]
+    assert len(marks) == min(res["how_often"]["total"], 400)
+    assert {m["camera_id"] for m in marks} == {"warehouse_cam1"} and all(0 <= m["t"] <= 310 for m in marks)
 
 
 def test_insight_wording():

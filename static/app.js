@@ -42,11 +42,22 @@ const WHY_WORDS = {
 const WHY_ORDER = ["relations", "motion", "position", "keyframe", "size"];
 const TOP_N = 12;
 const VERIFY_N = 10;
+const AUTO_CHECK_N = 3; // the AI watches the top few right away; "Check more" does the rest
+const AUTO_SEARCH_MS = 600; // re-search this long after the last sketch edit
+const CHIP_W = 22; // px, a numbered result chip on the camera lanes
 const FULL = { x: 0, y: 0, w: 1, h: 1 };
 const ZOOM_PAD = 0.3; // padding around the action, as a fraction of its size
 const ZOOM_MIN = 0.22; // never zoom in more than ~4.5x
 const ZOOM_SKIP = 0.8; // action already fills the frame: don't zoom
 const DRAW_STAGGER_MS = 150;
+// What each kind of example means to a safety lead (scripts/make_presets.py picks the kinds).
+const RISK_TAGS = {
+  approach: { text: "Near-miss", icon: "triangle-alert" },
+  meet: { text: "Aisle traffic", icon: "arrow-left-right" },
+  absent: { text: "Lone worker", icon: "user" },
+  group: { text: "Crowding", icon: "users" },
+  cross: { text: "Aisle crossing", icon: "move-horizontal" },
+};
 const KF_HELP = {
   start: "Draw where things are at the start.",
   end: "Drag each box to where it ends up.",
@@ -147,6 +158,7 @@ const state = {
   text: null, // sentence a Words -> Sketch came from
   history: [],
   checked: false, // AI check finished for the current results
+  fromPreset: false, // the next search comes from an example chip
 };
 
 let canvas = null;
@@ -542,15 +554,39 @@ function updateUi() {
   }
   for (const b of document.querySelectorAll(".kf")) b.classList.toggle("active", b.dataset.tab === state.tab);
   $("#caption").textContent = describeSketch(state.objects);
+  $("#caption").title = $("#caption").textContent; // the caption shows at most four lines
   $("#moveWarn").hidden = !state.objects.some((o) => !o.absent && moveLength(o) > MOVE_WARN);
   setProgress();
   $("#kfHelp").textContent = KF_HELP[state.tab];
   $("#canvasEmpty").hidden = state.objects.length > 0;
   $("#hint").hidden = state.objects.filter((o) => !o.absent).length !== 1;
-  $("#search").disabled = state.objects.length === 0;
   $("#delete").disabled = !state.selectedId;
   $("#undo").disabled = state.history.length === 0;
   $("#clear").disabled = state.objects.length === 0;
+  scheduleAutoSearch();
+}
+
+// Auto-search: any change to the sketch (or the camera filter) re-runs the search shortly after.
+let autoTimer = null;
+let searchedKey = null;
+let holdAuto = false; // while a sketch is drawn in step by step, the caller searches once at the end
+
+function sketchKey() {
+  return JSON.stringify([state.objects.map((o) => [o.label, o.absent, o.start, o.end, o.path]), $("#scope").value]);
+}
+
+function scheduleAutoSearch() {
+  clearTimeout(autoTimer);
+  if (holdAuto || !document.body.classList.contains("mode-studio") || !state.objects.length) return;
+  if (sketchKey() === searchedKey) return;
+  setAutoNote(true);
+  autoTimer = setTimeout(() => { if (!holdAuto && sketchKey() !== searchedKey) runSearch(); }, AUTO_SEARCH_MS);
+}
+
+function setAutoNote(busy) {
+  const note = $("#autoNote");
+  note.classList.toggle("busy", busy);
+  $("span", note).textContent = busy ? "Updating…" : "Live";
 }
 
 function selectCamera(cameraId, bgUrl = null) {
@@ -600,6 +636,8 @@ function showState(kind, message = "") {
   stopAllVideos();
   resetVerify();
   cards = [];
+  $("#stage").classList.remove("updating");
+  placeChips();
   const box = $("#results");
   if (kind === "loading") {
     box.innerHTML = `<div class="state"><div class="spinner"></div>Sliding your sketch over every clip…</div>`;
@@ -620,47 +658,58 @@ function escapeHtml(s) {
 }
 
 async function runSearch() {
-  if (!state.objects.length) return toast("Draw something first, or pick a demo preset.");
+  if (!state.objects.length) return toast("Draw something first, or pick an example.");
+  clearTimeout(autoTimer);
+  searchedKey = sketchKey();
   const seq = ++searchSeq;
   const sketch = toSketch();
-  showState("loading");
-  $("#search").disabled = true;
+  const fromPreset = state.fromPreset;
+  state.fromPreset = false;
+  if (cards.length) { // keep the current match playing, dimmed, until the new results land
+    $("#stage").classList.add("updating");
+    $("#status").textContent = "Updating…";
+  } else {
+    showState("loading");
+  }
+  setAutoNote(true);
   try {
     const res = await api("api/search", { method: "POST", body: JSON.stringify({ sketch, top_n: TOP_N }) });
     if (seq !== searchSeq) return;
-    renderResults(res, sketch);
+    renderResults(res, sketch, fromPreset);
   } catch (err) {
     if (seq === searchSeq) showState("error", err.message);
   } finally {
-    if (seq === searchSeq) updateUi();
+    if (seq === searchSeq) {
+      setAutoNote(false);
+      updateUi();
+    }
   }
 }
 
-function renderResults(res, sketch) {
-  resetVerify();
+function renderResults(res, sketch, fromPreset = false) {
   lastSketch = sketch;
-  if (!res.results.length) return showState("empty");
+  lastResponse = res;
+  if (!res.results.length) {
+    showState("empty");
+    return renderLanes(res);
+  }
   stopAllVideos();
-  const box = $("#results");
-  box.innerHTML = `<div class="featured" id="featured"></div>
-    <p class="strip-head">More matches · click one to see it big</p><div class="strip" id="strip"></div>
-    <section class="how-often" id="howOften" aria-label="How often does this happen?"></section>`;
+  resetVerify();
+  $("#stage").classList.remove("updating");
+  $("#results").innerHTML = `<div class="featured" id="featured"></div>`;
   const c = res.counts || {};
   $("#status").textContent = c.searched
-    ? `Searched ${c.searched} clips · ${(c.great || 0) + (c.good || 0)} great or good matches · ${(res.elapsed_ms / 1000).toFixed(2)} s`
-    : `${res.results.length} moments found in ${(res.elapsed_ms / 1000).toFixed(2)} s`;
+    ? `${(c.great || 0) + (c.good || 0)} great or good in ${c.searched} clips · ${(res.elapsed_ms / 1000).toFixed(2)} s`
+    : `${res.results.length} moments in ${(res.elapsed_ms / 1000).toFixed(2)} s`;
   const objects = sketch.objects.map((o) => ({
     ...o, start: o.start_box, end: o.end_box, path: o.path,
   }));
-  cards = res.results.map((r, i) => buildCard(r, i + 1, objects));
-  $("#featured").appendChild(cards[0].el);
-  cards[0].featured = true;
-  cards.slice(1).forEach((c) => $("#strip").appendChild(c.el));
-  $("#verifyBtn").disabled = false;
+  cards = res.results.map((r, i) => buildCard(r, i + 1, objects, res.results.length));
   $("#reportBtn").disabled = false;
   $("#copyLinkBtn").disabled = false;
-  lastResponse = res;
-  renderHowOften(res.how_often);
+  renderLanes(res);
+  featureCard(cards[0]);
+  syncCaseButtons();
   updateShareHash();
   state.checked = false;
   setProgress();
@@ -668,12 +717,14 @@ function renderResults(res, sketch) {
     api(`api/segments/${encodeURIComponent(card.result.segment_id)}`)
       .then((seg) => { card.segment = seg; updateZoom(card); })
       .catch(() => { /* overlay just shows the sketch */ });
-    drawOverlay(card, card.posterTime);
   }
+  // Demo-mode examples have saved verdicts (scripts/warm_demo.py), so check all of them; anything else costs live calls.
+  runVerify($("#demoMode").checked && fromPreset ? VERIFY_N : AUTO_CHECK_N);
 }
 
-function buildCard(r, rank, objects) {
-  const el = $("#cardTpl").content.firstElementChild.cloneNode(true);
+function buildCard(r, rank, objects, total) {
+  // importNode, not cloneNode: off-page cards must resolve their relative clip URLs against this page.
+  const el = document.importNode($("#cardTpl").content.firstElementChild, true);
   const video = $("video", el);
   if (r.frame_url) {
     video.src = r.clip_url;
@@ -685,10 +736,11 @@ function buildCard(r, rank, objects) {
   const match = $(".match", el);
   match.innerHTML = `${m.text.split(" ")[0]}<span class="word"> match</span>`;
   match.className = `match ${m.cls}`;
-  match.title = "Hover for the numbers";
   $(".where", el).textContent = whereLabel(r);
+  $(".rank", el).textContent = `${rank} of ${total}`;
   $(".score", el).textContent = r.score.toFixed(2);
   $(".explain", el).textContent = r.explanation || "";
+  $(".explain", el).title = r.explanation || ""; // clamped to three lines beside the player
   $(".why", el).innerHTML = whyMatched(r).map((w) =>
     `<li class="${w.cls}"><span class="mark" aria-hidden="true">${w.mark}</span>${escapeHtml(w.text)}</li>`).join("");
 
@@ -726,17 +778,39 @@ function buildCard(r, rank, objects) {
   win.style.left = `${(r.window[0] / duration) * 100}%`;
   win.style.width = `${((r.window[1] - r.window[0]) / duration) * 100}%`;
 
+  // Click (or tap) the video to pause or play; swipe left or right on a touch screen for the next match.
   const media = $(".media", el);
-  media.addEventListener("mouseenter", () => playCard(card));
-  media.addEventListener("mouseleave", () => { if (!card.pinned) pauseCard(card); });
+  let touchX = null, swiped = false;
+  media.addEventListener("touchstart", (e) => { touchX = e.touches[0].clientX; }, { passive: true });
+  media.addEventListener("touchend", (e) => {
+    const dx = touchX === null ? 0 : e.changedTouches[0].clientX - touchX;
+    touchX = null;
+    if (Math.abs(dx) > 48) { swiped = true; stepFeatured(dx < 0 ? 1 : -1); }
+  }, { passive: true });
   media.addEventListener("click", () => {
-    if (!card.featured) return featureCard(card);
-    card.pinned = !card.pinned;
-    card.pinned ? playCard(card) : pauseCard(card);
+    if (swiped) { swiped = false; return; }
+    togglePlay(card);
+  });
+  for (const [sel, d] of [[".nav.prev", -1], [".nav.next", 1]]) {
+    $(sel, el).addEventListener("click", (e) => { e.stopPropagation(); stepFeatured(d); });
+  }
+  const numbers = $(".numbers-btn", el);
+  numbers.addEventListener("click", () => {
+    const on = el.classList.toggle("show-numbers");
+    numbers.setAttribute("aria-expanded", String(on));
+    numbers.textContent = on ? "Show reasons" : "Show numbers";
   });
   video.addEventListener("seeked", () => { if (!card.playing) drawOverlay(card, video.currentTime); });
   $(".more", el).addEventListener("click", () => moreLikeThis(r));
+  const caseBtn = $(".case-add", el);
+  caseBtn.dataset.key = caseKey(r);
+  caseBtn.addEventListener("click", () => toggleCase(r, card.verdict, describeSketch(objects)));
   return card;
+}
+
+function togglePlay(card) {
+  card.pinned = !card.playing;
+  card.playing ? pauseCard(card) : playCard(card);
 }
 
 function playCard(card) {
@@ -926,7 +1000,7 @@ async function moreLikeThis(r) {
     });
     loadSketch({ objects }, { cameraId: r.camera_id, bgUrl: r.frame_url });
     window.scrollTo({ top: 0, behavior: "smooth" });
-    toast(`Copied this moment into the sketch (${whereLabel(r)}). Change anything, then press “Find this moment”.`);
+    toast(`Copied this moment into the sketch (${whereLabel(r)}). Change anything and the results follow.`);
   } catch (err) {
     toast(`Couldn't load that segment: ${err.message}`, true);
   }
@@ -986,11 +1060,25 @@ const VERDICT_UI = {
 function resetVerify() {
   if (verifyAbort) verifyAbort.abort();
   verifyAbort = null;
-  const btn = $("#verifyBtn");
-  btn.disabled = true;
-  btn.classList.remove("busy");
-  btn.innerHTML = `${icon("scan-search")}Ask AI to check these`;
   $("#verifySummary").hidden = true;
+  verifyLabel();
+}
+
+/** "Check with AI" → "Check 7 more" → "Check again", depending on what the AI has already watched. */
+function verifyLabel() {
+  const btn = $("#verifyBtn");
+  const busy = !!verifyAbort;
+  const left = cards.slice(0, VERIFY_N).filter((c) => !c.verdict).length;
+  const any = cards.some((c) => c.verdict);
+  const text = busy ? "AI is checking…" : !any ? "Check with AI" : left ? `Check ${left} more` : "Check again";
+  btn.innerHTML = `${icon(busy ? "loader" : any && !left ? "refresh-cw" : "scan-search")}<span class="label">${text}</span>`;
+  btn.disabled = busy || !cards.length;
+  btn.classList.toggle("busy", busy);
+}
+
+function checkMore() {
+  if (!cards.length || verifyAbort) return;
+  runVerify(VERIFY_N, cards.slice(0, VERIFY_N).every((c) => c.verdict));
 }
 
 function setVerdict(card, v) {
@@ -1013,33 +1101,39 @@ function setVerdict(card, v) {
   void stamp.offsetWidth; // restart the reveal
   stamp.style.animationName = "";
   card.el.classList.toggle("rejected", v.verdict === "NO");
+  updateMarks();
+  updateCaseVerdict(card.result, v);
 }
 
-function updateVerifySummary(counts, done, total) {
+function updateVerifySummary() {
   const el = $("#verifySummary");
-  el.hidden = false;
-  const extra = [counts.NO && `${counts.NO} rejected`, counts.UNSURE && `${counts.UNSURE} unsure`].filter(Boolean).join(", ");
-  if (done < total) {
-    el.innerHTML = `AI is watching the clips… ${done}/${total}`;
-  } else {
-    el.innerHTML = `AI confirmed <b>${counts.YES}</b> of ${total}` + (extra ? ` <span class="muted small">(${extra})</span>` : "");
+  const done = cards.filter((c) => c.verdict);
+  const pending = cards.filter((c) => c.checking).length;
+  el.hidden = !done.length && !pending;
+  const n = (v) => done.filter((c) => c.verdict.verdict === v).length;
+  if (pending) {
+    el.innerHTML = `${icon("loader")}AI is watching ${pending} clip${pending === 1 ? "" : "s"}…` +
+      (done.length ? ` <span class="muted small">${n("YES")} confirmed so far</span>` : "");
+  } else if (done.length) {
+    const extra = [n("NO") && `${n("NO")} rejected`, n("UNSURE") && `${n("UNSURE")} unsure`].filter(Boolean).join(", ");
+    el.innerHTML = `AI confirmed <b>${n("YES")}</b> of ${done.length}` + (extra ? ` <span class="muted small">(${extra})</span>` : "");
     state.checked = true;
     setProgress();
   }
 }
 
-async function runVerify() {
+/** Ask the video AI about the top `n` matches (only the unchecked ones unless `again`), streaming verdicts in. */
+async function runVerify(n = VERIFY_N, again = false) {
   if (!lastSketch || !cards.length) return;
-  const targets = cards.slice(0, VERIFY_N);
-  const btn = $("#verifyBtn");
+  const targets = cards.slice(0, n).filter((c) => again || !c.verdict);
+  if (!targets.length) return;
   if (verifyAbort) verifyAbort.abort();
   const controller = new AbortController();
   verifyAbort = controller;
-  btn.disabled = true;
-  btn.classList.add("busy");
-  btn.innerHTML = `${icon("loader")}AI is checking…`;
+  verifyLabel();
   for (const c of targets) {
     c.verdict = null;
+    c.checking = true;
     c.el.classList.remove("rejected");
     const b = $(".badge.verify", c.el);
     b.hidden = false;
@@ -1053,9 +1147,8 @@ async function runVerify() {
     st.style.animationDelay = "0ms";
     st.innerHTML = `${icon("loader")}Checking`;
   }
-  const counts = { YES: 0, NO: 0, UNSURE: 0 };
-  let done = 0;
-  updateVerifySummary(counts, 0, targets.length);
+  updateMarks();
+  updateVerifySummary();
   try {
     const res = await fetch("api/verify", {
       method: "POST",
@@ -1083,23 +1176,30 @@ async function runVerify() {
         if (event !== "verdict" || !data) continue;
         const payload = JSON.parse(data);
         const card = targets.find((c) => c.result.segment_id === payload.segment_id);
-        if (card) setVerdict(card, payload);
-        counts[payload.verdict] = (counts[payload.verdict] || 0) + 1;
-        done += 1;
-        updateVerifySummary(counts, done, targets.length);
+        if (!card) continue;
+        card.checking = false;
+        setVerdict(card, payload);
+        updateVerifySummary();
       }
     }
-    updateVerifySummary(counts, targets.length, targets.length);
   } catch (err) {
     if (err.name === "AbortError") return;
     toast(`AI check failed: ${err.message}`, true);
-    for (const c of targets) if (!c.verdict) $(".stamp", c.el).hidden = true;
   } finally {
     if (verifyAbort === controller) {
       verifyAbort = null;
-      btn.disabled = false;
-      btn.classList.remove("busy");
-      btn.innerHTML = `${icon("refresh-cw")}Ask AI to check again`;
+      for (const c of targets) {
+        c.checking = false;
+        if (c.verdict) continue;
+        $(".stamp", c.el).hidden = true;
+        const b = $(".badge.verify", c.el);
+        b.className = "badge verify";
+        b.textContent = "Not checked yet";
+        $(".verify-reason", c.el).textContent = "Press C or “Check with AI” to have the video AI watch it.";
+      }
+      verifyLabel();
+      updateMarks();
+      updateVerifySummary();
     }
   }
 }
@@ -1115,15 +1215,20 @@ function toStateObject(o) {
 }
 
 async function animateSketch(objects) {
-  snapshot();
-  state.objects = [];
-  state.selectedId = null;
-  state.tab = "start";
-  render();
-  for (const o of objects) {
-    await new Promise((resolve) => setTimeout(resolve, DRAW_STAGGER_MS));
-    state.objects.push(toStateObject(o));
+  holdAuto = true; // the caller searches once the whole sketch is in
+  try {
+    snapshot();
+    state.objects = [];
+    state.selectedId = null;
+    state.tab = "start";
     render();
+    for (const o of objects) {
+      await new Promise((resolve) => setTimeout(resolve, DRAW_STAGGER_MS));
+      state.objects.push(toStateObject(o));
+      render();
+    }
+  } finally {
+    holdAuto = false;
   }
 }
 
@@ -1163,7 +1268,7 @@ async function uploadDiagram() {
   const btn = $("#diagramBtn");
   btn.disabled = true;
   btn.classList.add("busy");
-  btn.innerHTML = `${icon("loader")}Reading your drawing…`;
+  btn.innerHTML = `${icon("loader")}<span class="label">Reading your drawing…</span>`;
   $("#caption").textContent = "Reading your drawing…";
   try {
     const form = new FormData();
@@ -1176,13 +1281,13 @@ async function uploadDiagram() {
     $("#showFrame").checked = true;
     setBackground();
     toast(`I found ${body.sketch.objects.length} things in your drawing (shown faintly behind). ` +
-          "Fix anything that's off, then press “Find this moment”.");
+          "Fix anything that's off and the results follow.");
   } catch (err) {
     toast(`Couldn't read the diagram: ${err.message}`, true);
   } finally {
     btn.disabled = false;
     btn.classList.remove("busy");
-    btn.innerHTML = `${icon("upload")}Upload a drawing`;
+    btn.innerHTML = `${icon("upload")}<span class="label">Upload a drawing</span>`;
   }
 }
 
@@ -1302,11 +1407,15 @@ function whyMatched(r) {
 // ---------------------------------------------------------------------------
 function enterStudio() {
   if (document.body.classList.contains("mode-studio")) return;
+  $("#topSearch").append($("#textForm"), $(".hero-actions")); // the search bar moves up into the header
   document.body.classList.replace("mode-landing", "mode-studio");
   setProgress();
 }
 
 function goHome() {
+  const current = cards.find((c) => c.featured);
+  if (current) pauseCard(current);
+  $("#examples").before($("#textForm"), $(".hero-actions"));
   document.body.classList.replace("mode-studio", "mode-landing");
   $("#sketchText").focus();
   setProgress();
@@ -1325,24 +1434,29 @@ function startDrawing() {
   toast("Choose Person, Forklift, Robot or Cart, then drag a box on the picture. Add an Arrow to show movement.");
 }
 
+/** Put a match on the big player and start it; the lanes mark it as the current one. */
 function featureCard(card) {
   const current = cards.find((c) => c.featured);
-  if (!current || current === card) return;
-  pauseCard(current);
-  current.pinned = false;
-  current.featured = false;
+  if (!card || (current === card && card.el.isConnected)) return;
+  if (current) {
+    pauseCard(current);
+    current.pinned = false;
+    current.featured = false;
+    current.el.remove();
+  }
   card.featured = true;
-  const strip = $("#strip");
-  // The old featured card goes back to its rank position in the strip.
-  const after = cards.filter((c) => !c.featured && c.rank > current.rank && c !== current)
-    .sort((a, b) => a.rank - b.rank)[0];
-  strip.insertBefore(current.el, after ? after.el : null);
+  card.pinned = true;
   $("#featured").appendChild(card.el);
   requestAnimationFrame(() => {
     applyZoom(card);
-    applyZoom(current);
+    if (card.featured && document.body.classList.contains("mode-studio")) playCard(card);
   });
-  $("#featured").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  updateMarks();
+}
+
+function stepFeatured(d) {
+  const i = cards.findIndex((c) => c.featured);
+  if (i >= 0) featureCard(cards[(i + d + cards.length) % cards.length]);
 }
 
 function setProgress() {
@@ -1377,9 +1491,8 @@ async function runPreset(p) {
   if (p.camera_id) selectCamera(p.camera_id);
   await animateSketch(p.sketch.objects);
   state.text = null;
+  state.fromPreset = true;
   await runSearch();
-  // Demo mode: verdicts are pre-cached by scripts/warm_demo.py, so check right away.
-  if ($("#demoMode").checked && cards.length) runVerify();
 }
 
 function initMic() {
@@ -1436,41 +1549,118 @@ function initGuide() {
 
 
 // ---------------------------------------------------------------------------
-// How often does this happen?
+// When it happened: one lane per camera on a shared time axis
 // ---------------------------------------------------------------------------
-// Ordinal two-step amber (--accent and a 52% mix toward --surface, see style.css); the dim step is under 3:1,
-// so every bar carries a visible total and a table view exists.
-function barChart(title, rows, labelOf) {
-  const max = Math.max(1, ...rows.map((r) => r.great + r.good));
-  const cols = rows.map((r) => {
-    const total = r.great + r.good;
-    const tip = `${labelOf(r)}: ${total} match${total === 1 ? "" : "es"} (${r.great} great, ${r.good} good)`;
-    const seg = (n, cls) => (n ? `<span class="seg ${cls}" style="height:${(n / max) * 100}%"></span>` : "");
-    return `<div class="col" tabindex="0" aria-label="${escapeHtml(tip)}" data-tip="${escapeHtml(tip)}">
-      <span class="total${total ? "" : " zero"}">${total}</span>
-      <div class="stack">${seg(r.good, "good")}${seg(r.great, "great")}</div>
-      <span class="xlab">${escapeHtml(labelOf(r))}</span></div>`;
-  }).join("");
-  const table = `<table><thead><tr><th>${escapeHtml(title)}</th><th>Great</th><th>Good</th></tr></thead><tbody>` +
-    rows.map((r) => `<tr><td>${escapeHtml(labelOf(r))}</td><td>${r.great}</td><td>${r.good}</td></tr>`).join("") +
-    "</tbody></table>";
-  return { chart: `<figure class="bar-chart"><figcaption>${escapeHtml(title)}</figcaption><div class="plot">${cols}</div></figure>`, table };
+// Faint ticks = every great or good match (how often), numbered chips = the top results (click to play).
+const startOf = (r) => r.start + r.window[0];
+
+function laneDuration(res) {
+  const cams = state.cameras.map((c) => c.duration || 0);
+  const ends = (res?.results || []).map((r) => r.end);
+  return Math.max(res?.how_often?.duration || 0, ...cams, ...ends, 60);
 }
 
-function renderHowOften(h) {
-  const box = $("#howOften");
-  if (!box || !h) return;
-  const cams = barChart("Per camera", h.per_camera, (r) => r.name);
-  const mins = barChart("Per minute of video", h.per_minute, (r) => `${r.minute}:00`);
-  box.innerHTML = `
-    <div class="how-head">
-      <h3>${icon("chart-column")}How often does this happen?</h3>
-      <div class="legend"><span><i class="sw great"></i>Great match</span>
-        <span><i class="sw good"></i>Good match</span></div>
-    </div>
-    <p class="insight">${escapeHtml(h.insight)} <span class="muted small">(${h.total} great or good matches in all)</span></p>
-    <div class="charts">${cams.chart}${mins.chart}</div>
-    <details class="table-view"><summary>Show as table</summary><div class="tables">${cams.table}${mins.table}</div></details>`;
+function renderLanes(res) {
+  const h = res?.how_often;
+  $("#insight").textContent = h ? h.insight : "Every match across all cameras shows up on this timeline.";
+  const dur = laneDuration(res);
+  const pct = (t) => `${(clamp(t / dur, 0, 1) * 100).toFixed(2)}%`;
+  const scope = $("#scope").value;
+  const counts = Object.fromEntries((h?.per_camera || []).map((c) => [c.camera_id, c.great + c.good]));
+  const lanes = state.cameras.map((cam) => {
+    const ticks = (h?.marks || []).filter((m) => m.camera_id === cam.camera_id)
+      .map((m) => `<i class="tick${m.great ? " great" : ""}" style="left:${pct(m.t)}"></i>`).join("");
+    const off = scope && scope !== cam.camera_id ? " off" : "";
+    const n = counts[cam.camera_id] ?? 0;
+    return `<div class="lane${off}" data-camera="${escapeHtml(cam.camera_id)}">
+      <span class="lane-name">${escapeHtml(shortCamera(cam.camera_id))}<b title="${n} great or good matches">${n}</b></span>
+      <div class="track">${ticks}</div></div>`;
+  }).join("");
+  const minutes = [];
+  for (let m = 0; m * 60 <= dur; m++) minutes.push(`<span style="left:${pct(m * 60)}">${m}:00</span>`);
+  $("#lanesBody").innerHTML = `${lanes}<div class="axis"><span class="lane-name"></span><div class="track">${minutes.join("")}</div></div>`;
+  placeChips();
+}
+
+/** Numbered chips at each top result's start; chips that would overlap are nudged apart (the thin bar under each
+ *  chip stays at the true time). */
+function placeChips() {
+  hideTip();
+  for (const el of document.querySelectorAll("#lanesBody .chip-mark, #lanesBody .win-mark")) el.remove();
+  if (!cards.length) return;
+  const dur = laneDuration(lastResponse);
+  for (const lane of document.querySelectorAll("#lanesBody .lane")) {
+    const track = $(".track", lane);
+    const w = track.clientWidth;
+    if (!w) continue;
+    const mine = cards.filter((c) => c.result.camera_id === lane.dataset.camera)
+      .sort((a, b) => startOf(a.result) - startOf(b.result));
+    const xs = [];
+    let right = -Infinity;
+    for (const c of mine) {
+      const x = Math.max(clamp((startOf(c.result) / dur) * w - CHIP_W / 2, 0, w - CHIP_W), right + 2);
+      xs.push(x);
+      right = x + CHIP_W;
+    }
+    let left = w + 2;
+    for (let i = xs.length - 1; i >= 0; i--) { xs[i] = Math.min(xs[i], left - 2 - CHIP_W); left = xs[i]; }
+    if (xs[0] < 0) xs.forEach((_, i) => { xs[i] = mine.length > 1 ? (i * (w - CHIP_W)) / (mine.length - 1) : 0; }); // too many to fit: spread evenly
+    mine.forEach((c, i) => {
+      const r = c.result;
+      const x0 = (startOf(r) / dur) * w, x1 = ((r.start + r.window[1]) / dur) * w;
+      track.insertAdjacentHTML("beforeend",
+        `<i class="win-mark" style="left:${x0.toFixed(1)}px;width:${Math.max(3, x1 - x0).toFixed(1)}px"></i>` +
+        `<button class="chip-mark ${matchLabel(r.score).cls}" data-rank="${c.rank}" style="left:${xs[i].toFixed(1)}px">${c.rank}</button>`);
+    });
+  }
+  updateMarks();
+}
+
+function updateMarks() {
+  for (const b of document.querySelectorAll("#lanesBody .chip-mark")) {
+    const c = cards[b.dataset.rank - 1];
+    if (!c) continue;
+    const v = c.verdict?.verdict;
+    b.classList.toggle("current", c.featured);
+    b.classList.toggle("yes", v === "YES");
+    b.classList.toggle("no", v === "NO");
+    b.classList.toggle("unsure", v === "UNSURE");
+    b.classList.toggle("checking", !!c.checking);
+    b.setAttribute("aria-current", c.featured ? "true" : "false");
+    b.setAttribute("aria-label", `Match ${c.rank}: ${matchLabel(c.result.score).text}, ${whereLabel(c.result)}` +
+      (v ? `, AI: ${VERDICT_UI[v]?.text || v}` : ""));
+  }
+}
+
+function showTip(btn) {
+  const c = cards[btn.dataset.rank - 1];
+  if (!c) return;
+  const r = c.result, v = c.verdict;
+  const tip = $("#laneTip");
+  const ai = v ? `${VERDICT_UI[v.verdict]?.text || v.verdict}: ${v.reason}` : c.checking ? "The AI is watching it now." : "Not checked by AI yet.";
+  tip.innerHTML = `${r.frame_url ? `<img src="${escapeHtml(r.frame_url)}" alt="">` : ""}
+    <div><b>${c.rank}. ${matchLabel(r.score).text}</b> · ${escapeHtml(whereLabel(r))}
+    <p class="${v ? v.verdict.toLowerCase() : "muted"}">${escapeHtml(ai)}</p></div>`;
+  tip.hidden = false;
+  const panel = $("#lanes").getBoundingClientRect(), b = btn.getBoundingClientRect();
+  tip.style.left = `${clamp(b.left + b.width / 2 - panel.left - tip.offsetWidth / 2, 8, panel.width - tip.offsetWidth - 8)}px`;
+  tip.style.bottom = `${panel.bottom - b.top + 8}px`;
+}
+
+function hideTip() {
+  $("#laneTip").hidden = true;
+}
+
+function initLanes() {
+  const body = $("#lanesBody");
+  const chip = (e) => e.target.closest?.(".chip-mark");
+  body.addEventListener("click", (e) => { const b = chip(e); if (b) featureCard(cards[b.dataset.rank - 1]); });
+  body.addEventListener("pointerover", (e) => { const b = chip(e); if (b && e.pointerType === "mouse") showTip(b); });
+  body.addEventListener("pointerout", (e) => { if (chip(e)) hideTip(); });
+  body.addEventListener("focusin", (e) => { const b = chip(e); if (b) showTip(b); });
+  body.addEventListener("focusout", hideTip);
+  let frame = 0;
+  new ResizeObserver(() => { cancelAnimationFrame(frame); frame = requestAnimationFrame(placeChips); }).observe(body);
 }
 
 // ---------------------------------------------------------------------------
@@ -1574,38 +1764,72 @@ function absUrl(u) {
   return u ? new URL(u, document.baseURI).href : "";
 }
 
-async function openReport() {
-  if (!lastResponse || !cards.length) return toast("Run a search first, then create the report.");
+/** A printable report in a new window. kind: "search" (current results), "sweep" (last safety sweep) or "case"
+ *  (the clips saved as evidence). */
+async function openReport(kind = "search") {
+  let items; // [{r: result, v: {verdict, reason} | null, from}]
+  if (kind === "case") {
+    items = caseItems.map((i) => ({ r: i.r, v: i.v, from: i.from }));
+  } else if (kind === "sweep") {
+    items = sweepItems();
+  } else {
+    if (!lastResponse || !cards.length) return toast("Run a search first, then create the report.");
+    const verified = cards.filter((c) => c.verdict);
+    items = (verified.length ? verified : cards).slice(0, 6).map((c) => ({ r: c.result, v: c.verdict, from: "" }));
+  }
+  if (!items.length) return toast("Nothing to report yet.");
   const w = window.open("", "_blank"); // open first, inside the click, so pop-up blockers allow it
   if (!w) return toast("Your browser blocked the report window. Allow pop-ups for this page.", true);
   w.document.write("<p style='font-family:sans-serif;padding:2rem'>Preparing the report…</p>");
   if (!state.health) {
     try { state.health = await api("api/health"); } catch { /* settings just show "-" */ }
   }
-  const res = lastResponse;
-  const verified = cards.filter((c) => c.verdict);
-  const picked = (verified.length ? verified : cards).slice(0, 6);
-  const confirmed = verified.filter((c) => c.verdict.verdict === "YES").length;
   const health = state.health || {};
+  const checked = items.filter((i) => i.v && i.v.verdict !== "SKIPPED");
+  const confirmed = checked.filter((i) => i.v.verdict === "YES").length;
+  const cams = new Set(items.map((i) => i.r.camera_id)).size;
+
+  const title = { search: "Search report", sweep: "Safety sweep report", case: "Case report" }[kind];
+  let lookedFor, counts;
+  if (kind === "search") {
+    const src = sketchImage();
+    lookedFor = `<div class="sketch">${src ? `<img src="${src}" alt="The sketch">` : ""}
+      <p class="caption">${escapeHtml(describeSketch(state.objects))}</p></div>
+      <p>${escapeHtml(lastResponse.how_often?.insight || "")}</p>`;
+    counts = [[lastResponse.counts.searched, "clips searched"], [lastResponse.counts.great + lastResponse.counts.good, "great or good matches"],
+      [checked.length ? confirmed : "-", checked.length ? `confirmed by AI (of ${checked.length} checked)` : "confirmed by AI (not checked yet)"]];
+  } else if (kind === "sweep") {
+    const rep = agent.lastReport;
+    lookedFor = `<p class="caption">${escapeHtml(agent.goal || "")}</p><p class="muted">${escapeHtml(agent.summary || "")}</p>`;
+    counts = [[rep.stats.sketch_runs, "searches run by the agent"], [rep.stats.clips_checked, "clips checked by AI"],
+      [rep.stats.confirmed, "confirmed moments"]];
+  } else {
+    const froms = [...new Set(items.map((i) => i.from).filter(Boolean))];
+    lookedFor = `<p class="caption">${items.length} clip${items.length === 1 ? "" : "s"} saved as evidence</p>` +
+      (froms.length ? `<p class="muted">Found with: ${froms.map(escapeHtml).join(" · ")}</p>` : "");
+    counts = [[items.length, "clips in the case"], [cams, `camera${cams === 1 ? "" : "s"}`],
+      [checked.length ? confirmed : "-", checked.length ? `confirmed by AI (of ${checked.length} checked)` : "confirmed by AI (not checked yet)"]];
+  }
   const settings = [
-    ["Description", $("#sketchText").value.trim() || "(drawn by hand)"],
-    ["Searched in", $("#scope").selectedOptions[0]?.textContent || "All cameras"],
+    ...(kind === "search" ? [["Description", $("#sketchText").value.trim() || "(drawn by hand)"],
+      ["Searched in", $("#scope").selectedOptions[0]?.textContent || "All cameras"]] : []),
     ["Footage", health.index ? `${health.index.segments} clips of 4 s from ${health.index.cameras} cameras (${health.index.source})` : "-"],
     ["AI checker", (health.verify?.models || [])[0] || "-"],
     ["Mode", $("#demoMode").checked ? "Demo mode (pre-computed AI checks)" : "Live"],
   ];
-  const clip = (c) => {
-    const r = c.result, m = matchLabel(r.score), v = c.verdict;
-    const verdict = v ? `${VERDICT_UI[v.verdict]?.text || v.verdict}: ${escapeHtml(v.reason)}` : "Not checked by AI";
+  const clip = ({ r, v, from }) => {
+    const m = matchLabel(r.score);
+    const verdict = v && v.verdict !== "SKIPPED" ? `${VERDICT_UI[v.verdict]?.text || v.verdict}: ${escapeHtml(v.reason)}` : "Not checked by AI";
     const img = r.frame_url ? `<img src="${escapeHtml(absUrl(r.frame_url))}" alt="">` : "";
     return `<article class="clip">${img}<div>
       <h3>${escapeHtml(whereLabel(r))} <span class="lvl ${m.cls}">${m.text}</span></h3>
       <p class="verdict ${v ? v.verdict.toLowerCase() : "none"}">${verdict}</p>
+      ${from ? `<p class="muted">Found by: ${escapeHtml(from)}</p>` : ""}
       <p class="muted">${escapeHtml(r.explanation || "")}</p>
       <p class="muted small">Clip <a href="${escapeHtml(absUrl(r.clip_url))}">${escapeHtml(r.segment_id)}</a>,
         matched seconds ${r.window[0]}-${r.window[1]} · score ${r.score.toFixed(2)}</p></div></article>`;
   };
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>SketchSearch incident report</title>
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>SketchSearch ${title.toLowerCase()}</title>
 <style>
   :root { --ink: #1b1d22; --paper: #ffffff; --page: #f4f2ec; --line: #e3ded2; --soft: #666b75; --accent: #b37708;
     --accent-fill: #c2800e; --ok: #1f7a45; --bad: #b23a2c; --warn: #8a5a00;
@@ -1618,7 +1842,7 @@ async function openReport() {
   .meta { text-align: right; font-size: 13px; color: var(--soft); }
   .sketch { display: grid; grid-template-columns: 300px 1fr; gap: 20px; align-items: center; }
   .sketch img { width: 300px; border-radius: 6px; border: 1px solid var(--line); }
-  .caption { font-size: 18px; font-weight: 600; }
+  .caption { font-size: 18px; font-weight: 600; margin: 0 0 6px; }
   .counts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
   .count { border: 1px solid var(--line); border-radius: 8px; padding: 12px; } .count b { display: block; font-size: 28px; font-family: Archivo, sans-serif; }
   .clip { display: grid; grid-template-columns: 220px 1fr; gap: 16px; padding: 12px 0; border-top: 1px solid var(--line); break-inside: avoid; }
@@ -1636,23 +1860,17 @@ async function openReport() {
 </style></head><body>
 <div class="toolbar"><button class="ghost" onclick="window.close()">Close</button><button onclick="window.print()">Save as PDF</button></div>
 <div class="page">
-  <header><div><h1>Sketch<span>Search</span> incident report</h1><div class="muted">Moments matching a sketched scene, checked by a video AI</div></div>
+  <header><div><h1>Sketch<span>Search</span> ${escapeHtml(title.toLowerCase())}</h1><div class="muted">Warehouse camera footage, checked by a video AI</div></div>
     <div class="meta">${escapeHtml(new Date().toLocaleString())}</div></header>
-  <h2>What we looked for</h2>
-  <div class="sketch">${(() => { const src = sketchImage(); return src ? `<img src="${src}" alt="The sketch">` : ""; })()}
-    <p class="caption">${escapeHtml(describeSketch(state.objects))}</p></div>
+  <h2>${kind === "case" ? "What's in this case" : "What we looked for"}</h2>
+  ${lookedFor}
   <h2>Summary</h2>
-  <div class="counts">
-    <div class="count"><b>${res.counts.searched}</b>clips searched</div>
-    <div class="count"><b>${res.counts.great + res.counts.good}</b>great or good matches</div>
-    <div class="count"><b>${verified.length ? confirmed : "-"}</b>${verified.length ? `confirmed by AI (of ${verified.length} checked)` : "confirmed by AI (not checked yet)"}</div>
-  </div>
-  <p>${escapeHtml(res.how_often?.insight || "")}</p>
-  <h2>${verified.length ? "Clips checked by AI" : "Top matches"}</h2>
-  ${picked.map(clip).join("")}
+  <div class="counts">${counts.map(([n, label]) => `<div class="count"><b>${escapeHtml(n)}</b>${escapeHtml(label)}</div>`).join("")}</div>
+  <h2>${kind === "search" ? (checked.length ? "Clips checked by AI" : "Top matches") : "Clips"}</h2>
+  ${items.map(clip).join("")}
   <h2>Settings</h2>
   <table>${settings.map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td>${escapeHtml(v)}</td></tr>`).join("")}</table>
-  <footer>Generated by SketchSearch. Matches are geometric similarity to the sketch; AI verdicts come from a video model
+  <footer>Generated by SketchSearch. Matches are geometric similarity to a sketch; AI verdicts come from a video model
     and can be wrong. Review the clips before acting on them.</footer>
 </div></body></html>`;
   w.document.open();
@@ -1669,8 +1887,7 @@ function bindControls() {
   $("#undo").addEventListener("click", undo);
   $("#delete").addEventListener("click", deleteSelected);
   $("#clear").addEventListener("click", clearAll);
-  $("#search").addEventListener("click", runSearch);
-  $("#verifyBtn").addEventListener("click", runVerify);
+  $("#verifyBtn").addEventListener("click", checkMore);
   $("#textForm").addEventListener("submit", sketchFromText);
   $("#diagramBtn").addEventListener("click", () => $("#diagramFile").click());
   $("#diagramFile").addEventListener("change", uploadDiagram);
@@ -1681,23 +1898,58 @@ function bindControls() {
     if (state.objects.length && cards.length) runSearch();
   });
   $("#drawBtn").addEventListener("click", startDrawing);
-  $("#reportBtn").addEventListener("click", openReport);
+  $("#reportBtn").addEventListener("click", () => openReport("search"));
   $("#copyLinkBtn").addEventListener("click", copyLink);
   $("#homeLink").addEventListener("click", goHome);
   initMic();
   initGuide();
+  initLanes();
+  initPresenterMenu();
   document.addEventListener("keydown", (e) => {
     const el = document.activeElement;
+    if ($("#guide").open) return; // the guide has its own arrow keys
     if (el && (el.tagName === "TEXTAREA" || el.tagName === "SELECT" || (el.tagName === "INPUT" && el.type === "text"))) return;
     const key = e.key.toLowerCase();
+    const inStudio = document.body.classList.contains("mode-studio") && !$("#searchView").hidden;
+    const featured = cards.find((c) => c.featured);
     if ((e.ctrlKey || e.metaKey) && key === "z") { e.preventDefault(); undo(); }
     else if ((e.ctrlKey || e.metaKey) && key === "enter") { e.preventDefault(); runSearch(); }
     else if (e.key === "Delete" || e.key === "Backspace") { if (state.selectedId) { e.preventDefault(); deleteSelected(); } }
-    else if (!e.ctrlKey && !e.metaKey && !e.altKey) {
-      if (key === "b") setTool("box");
-      else if (key === "p" || key === "a") setTool("path");
-      else if (key === "n" || key === "e") setTool("absent", "person");
+    else if (e.ctrlKey || e.metaKey || e.altKey) return;
+    else if (e.key === "?") $("#helpBtn").click();
+    else if (key === "d") setDemo(!$("#demoMode").checked, true);
+    else if (!inStudio) return;
+    else if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+      if (featured) { e.preventDefault(); stepFeatured(e.key === "ArrowRight" ? 1 : -1); }
+    } else if (e.key === " ") {
+      // Space on a focused button presses it; anywhere else it plays or pauses the match.
+      if (featured && !(el && el.matches("button, summary, input, a"))) { e.preventDefault(); togglePlay(featured); }
     }
+    else if (key === "c") checkMore();
+    else if (key === "b") setTool("box");
+    else if (key === "p" || key === "a") setTool("path");
+    else if (key === "n" || key === "e") setTool("absent", "person");
+  });
+}
+
+// Presenter options live behind the ⋮ menu so the main screen stays clean.
+function setDemo(on, announce = false) {
+  $("#demoMode").checked = on;
+  $("#demoBadge").hidden = !on;
+  document.body.classList.toggle("demo-on", on);
+  try { localStorage.setItem("sketchsearch.demo", on ? "1" : "0"); } catch { /* storage blocked */ }
+  if (announce) {
+    toast(on ? "Demo mode on: AI checks and the agent replay saved results, so nothing waits."
+      : "Demo mode off: everything runs live.");
+  }
+}
+
+function initPresenterMenu() {
+  const menu = $("#presenterMenu");
+  $("#demoMode").addEventListener("change", (e) => setDemo(e.target.checked, true));
+  document.addEventListener("click", (e) => { if (menu.open && !menu.contains(e.target)) menu.open = false; });
+  menu.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { menu.open = false; $("summary", menu).focus(); }
   });
 }
 
@@ -1713,6 +1965,9 @@ async function init() {
   try {
     const [cams, presets] = await Promise.all([api("api/cameras"), api("api/presets")]);
     state.cameras = cams;
+    const minutes = Math.round(cams.reduce((t, c) => t + (c.duration || 0), 0) / 60);
+    $("#footage").innerHTML = `${icon("cctv")}Searching ${cams.length} warehouse camera${cams.length === 1 ? "" : "s"}` +
+      (minutes ? `, ${minutes} minutes of footage` : "");
     $("#camera").innerHTML = cams.map((c) => `<option value="${c.camera_id}">${escapeHtml(c.name)}</option>`).join("");
     $("#scope").insertAdjacentHTML("beforeend",
       cams.map((c) => `<option value="${c.camera_id}">${escapeHtml(shortCamera(c.camera_id))}</option>`).join(""));
@@ -1722,7 +1977,8 @@ async function init() {
     for (const p of presets) {
       const b = document.createElement("button");
       b.className = "chip";
-      b.textContent = p.chip || p.title;
+      const risk = RISK_TAGS[p.kind || p.id];
+      b.innerHTML = `${risk ? `<span class="risk">${icon(risk.icon)}${risk.text}</span>` : ""}<span>${escapeHtml(p.chip || p.title)}</span>`;
       b.title = p.description;
       b.addEventListener("click", () => runPreset(p));
       holder.appendChild(b);
